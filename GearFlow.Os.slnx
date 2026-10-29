@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="src/GearFlow.Os.Domain/GearFlow.Os.Domain.csproj" />
+  <Project Path="src/GearFlow.Os.Application/GearFlow.Os.Application.csproj" />
+  <Project Path="src/GearFlow.Os.Infrastructure/GearFlow.Os.Infrastructure.csproj" />
+  <Project Path="src/GearFlow.Os.Api/GearFlow.Os.Api.csproj" />
+  <Project Path="tests/GearFlow.Os.Tests/GearFlow.Os.Tests.csproj" />
+</Solution>

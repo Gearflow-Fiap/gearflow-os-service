@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GearFlow.Os.Infrastructure" />
+    <InternalsVisibleTo Include="GearFlow.Os.Tests" />
+  </ItemGroup>
+
+</Project>

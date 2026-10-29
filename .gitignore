@@ -1,0 +1,11 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+.tools/
+TestResults/
+coverage/
+*.DotSettings.user
+appsettings.*.local.json
