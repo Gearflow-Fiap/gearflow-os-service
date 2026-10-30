@@ -2,10 +2,10 @@ namespace GearFlow.Os.Application.Messaging;
 
 public static class EventRoutes
 {
-    public const string OrderCreated = "order.created";
-    public const string OrcamentoGerado = "orcamento.gerado";
-    public const string OrcamentoApproved = "orcamento.approved";
-    public const string OrcamentoRejected = "orcamento.rejected";
+    public const string OrderCreated = "os.created";
+    public const string OrcamentoGerado = "budget.generated";
+    public const string OrcamentoApproved = "budget.approved";
+    public const string OrcamentoRejected = "budget.rejected";
     public const string OperationCompleted = "operation.completed";
 }
 

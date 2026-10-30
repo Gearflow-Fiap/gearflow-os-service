@@ -2,7 +2,7 @@
 
 Microsserviço da **Ordem de Serviço**. Roda inteiro na máquina: API, PostgreSQL e RabbitMQ. Não chama nuvem nem Mercado Pago.
 
-Este serviço é dono do cliente, do veículo, da abertura da OS, do status e do histórico. Orçamento, operação e estoque entram depois, por evento. A saga é coreografada: este serviço publica `order.created` e reage aos eventos dos outros.
+Este serviço é dono do cliente, do veículo, da abertura da OS, do status e do histórico. Orçamento, operação e estoque entram depois, por evento. A saga é coreografada: este serviço publica `os.created` e reage aos eventos dos outros.
 
 ## Status
 
@@ -66,16 +66,25 @@ GET /api/ordens-servico/<id>
 
 `tipo` também aceita `OrcamentoRejected`, que cancela a OS.
 
-A abertura grava `order.created` na outbox e o dispatcher publica no exchange `gearflow.events`. Dá para ver a mensagem no painel do RabbitMQ.
+A abertura grava `os.created` na outbox e o dispatcher publica no exchange `gearflow.events`. Dá para ver a mensagem no painel do RabbitMQ.
 
 ## Eventos
 
+A primeira parte da rota é o nome do repositório, sem `gearflow-` e sem `-service`. Assim o evento indica qual serviço publicou:
+
+| Repositório | Prefixo |
+|---|---|
+| `gearflow-os-service` | `os` |
+| `gearflow-budget-service` | `budget` |
+| `gearflow-operation-service` | `operation` |
+| `gearflow-inventory-service` | `inventory` |
+
 | Rota | Direção | Efeito neste serviço |
 |---|---|---|
-| `order.created` | publica | OS aberta |
-| `orcamento.gerado` | consome | `WaitingOrcamento` |
-| `orcamento.approved` | consome | histórico `Paid`, estado `InProgress` |
-| `orcamento.rejected` | consome | `Cancelled` |
+| `os.created` | publica | OS aberta |
+| `budget.generated` | consome | `WaitingOrcamento` |
+| `budget.approved` | consome | histórico `Paid`, estado `InProgress` |
+| `budget.rejected` | consome | `Cancelled` |
 | `operation.completed` | consome | libera a entrega |
 
 O corpo dos eventos consumidos é JSON: `{ "messageId": "<guid>", "serviceOrderId": "<guid>" }`. O mesmo `messageId` não muda a OS duas vezes. A publicação e a gravação da OS saem na mesma transação (outbox).
