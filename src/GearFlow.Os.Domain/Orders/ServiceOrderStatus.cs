@@ -7,5 +7,8 @@ public enum ServiceOrderStatus
     Paid = 3,
     InProgress = 4,
     Completed = 5,
-    Cancelled = 6
+    Cancelled = 6,
+    AwaitingStock = 7,
+    AwaitingPayment = 8,
+    AwaitingParts = 9
 }

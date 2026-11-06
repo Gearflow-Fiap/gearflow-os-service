@@ -28,18 +28,34 @@ public class ServiceOrderTests
     }
 
     [Fact]
-    public void Pagamento_passa_por_paid_e_para_em_execucao()
+    public void Aprovacao_com_pecas_aguarda_estoque_e_o_pagamento_vai_para_execucao()
     {
         var order = Opened();
         order.ApplyOrcamentoGerado(Now);
-        order.ApplyOrcamentoApproved(Now);
+        order.ApplyOrcamentoApproved(Now, hasStockItems: true);
+        order.ApplyStockReserved(Now);
+        order.ApplyPaymentConfirmed(Guid.NewGuid(), Now);
 
         order.Status.Should().Be(ServiceOrderStatus.InProgress);
         order.History.Select(item => item.Status).Should().Equal(
             ServiceOrderStatus.Created,
             ServiceOrderStatus.WaitingOrcamento,
+            ServiceOrderStatus.AwaitingStock,
+            ServiceOrderStatus.AwaitingPayment,
             ServiceOrderStatus.Paid,
             ServiceOrderStatus.InProgress);
+    }
+
+    [Fact]
+    public void Estoque_insuficiente_espera_reposicao()
+    {
+        var order = Opened();
+        order.ApplyOrcamentoGerado(Now);
+        order.ApplyOrcamentoApproved(Now);
+        order.ApplyStockInsufficient(Now);
+        order.RetryStockAfterReplenish(Now);
+
+        order.Status.Should().Be(ServiceOrderStatus.AwaitingStock);
     }
 
     [Fact]
@@ -56,14 +72,18 @@ public class ServiceOrderTests
     }
 
     [Fact]
-    public void Entrega_so_acontece_depois_da_operacao()
+    public void Entrega_so_acontece_depois_da_operacao_e_da_baixa()
     {
         var order = Opened();
         order.ApplyOrcamentoGerado(Now);
         order.ApplyOrcamentoApproved(Now);
+        order.ApplyStockReserved(Now);
+        order.ApplyPaymentConfirmed(Guid.NewGuid(), Now);
 
         order.Deliver(Now).IsFailure.Should().BeTrue();
         order.ApplyOperationCompleted(Now);
+        order.Deliver(Now).Error.Code.Should().Be("Os.StockPending");
+        order.ApplyStockConsumed(Now);
         order.Deliver(Now).IsSuccess.Should().BeTrue();
         order.Status.Should().Be(ServiceOrderStatus.Completed);
         order.Deliver(Now).IsSuccess.Should().BeTrue();

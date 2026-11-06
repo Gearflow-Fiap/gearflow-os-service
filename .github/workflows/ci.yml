@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "10.0.x"
+  DOTNET_NOLOGO: "true"
+  COVERAGE_MIN: "0.80"
+
+jobs:
+  build:
+    name: Build + testes + cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore GearFlow.Os.slnx
+
+      - name: Build
+        run: dotnet build GearFlow.Os.slnx -c Release --no-restore
+
+      - name: Testes com cobertura
+        run: >
+          dotnet test tests/GearFlow.Os.Tests -c Release --no-build
+          --settings coverlet.runsettings
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+
+      - name: Gate de cobertura (>= 80%)
+        run: |
+          report=$(find coverage -name coverage.cobertura.xml | head -1)
+          test -n "$report" || { echo "::error::Relatório de cobertura não encontrado"; exit 1; }
+          rate=$(grep -o 'line-rate="[0-9.]*"' "$report" | head -1 | grep -o '[0-9.]*')
+          echo "Cobertura de linhas: $rate (mínimo: $COVERAGE_MIN)"
+          awk -v r="$rate" -v m="$COVERAGE_MIN" 'BEGIN { exit !(r >= m) }' \
+            || { echo "::error::Cobertura abaixo de $COVERAGE_MIN"; exit 1; }
+
+      - name: Publica cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: ./coverage/**/coverage.cobertura.xml
+          if-no-files-found: ignore

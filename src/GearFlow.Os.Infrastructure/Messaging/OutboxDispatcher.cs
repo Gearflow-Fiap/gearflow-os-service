@@ -1,5 +1,4 @@
 using System.Text;
-using GearFlow.Os.Application.Messaging;
 using GearFlow.Os.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,11 +25,11 @@ public sealed class OutboxDispatcher(
             {
                 await using var connection = await factory.CreateConnectionAsync(stoppingToken);
                 await using var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
-                await channel.ExchangeDeclareAsync(settings.Exchange, ExchangeType.Topic, durable: true, cancellationToken: stoppingToken);
+                await Topology.DeclareAsync(channel, settings, stoppingToken);
 
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    var published = await PublishPendingAsync(channel, settings.Exchange, stoppingToken);
+                    var published = await PublishPendingAsync(channel, settings, stoppingToken);
                     if (published == 0)
                         await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
                 }
@@ -47,7 +46,7 @@ public sealed class OutboxDispatcher(
         }
     }
 
-    private async Task<int> PublishPendingAsync(IChannel channel, string exchange, CancellationToken cancellationToken)
+    private async Task<int> PublishPendingAsync(IChannel channel, RabbitMqOptions settings, CancellationToken cancellationToken)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OsDbContext>();
@@ -59,11 +58,26 @@ public sealed class OutboxDispatcher(
 
         foreach (var message in pending)
         {
-            await channel.BasicPublishAsync(
-                exchange,
-                message.RoutingKey,
-                Encoding.UTF8.GetBytes(message.Payload),
-                cancellationToken);
+            var properties = new BasicProperties
+            {
+                ContentType = string.IsNullOrWhiteSpace(message.ContentType) ? "application/json" : message.ContentType,
+                DeliveryMode = DeliveryModes.Persistent,
+                MessageId = message.MessageId == Guid.Empty ? null : message.MessageId.ToString("D"),
+                CorrelationId = message.CorrelationId == Guid.Empty ? null : message.CorrelationId.ToString("D")
+            };
+
+            if (!string.IsNullOrWhiteSpace(message.Queue))
+            {
+                await channel.QueueDeclareAsync(message.Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: cancellationToken);
+                await channel.BasicPublishAsync("", message.Queue, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+            }
+            else
+            {
+                var exchange = string.IsNullOrWhiteSpace(message.Exchange) ? settings.Exchange : message.Exchange;
+                await channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
+                await channel.BasicPublishAsync(exchange, message.RoutingKey, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+            }
+
             message.ProcessedOn = DateTime.UtcNow;
         }
 

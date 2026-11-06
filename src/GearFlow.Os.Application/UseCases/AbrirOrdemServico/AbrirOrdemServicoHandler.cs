@@ -1,6 +1,6 @@
 using GearFlow.Os.Application.Abstractions;
 using GearFlow.Os.Application.Dtos;
-using GearFlow.Os.Application.Messaging;
+using GearFlow.Os.Application.Saga;
 using GearFlow.Os.Domain.Orders;
 using GearFlow.Os.Domain.Primitives;
 
@@ -11,7 +11,7 @@ public sealed record AbrirOrdemServicoCommand(Guid VehicleId, IReadOnlyList<stri
 public sealed class AbrirOrdemServicoHandler(
     IVehicleRepository vehicles,
     IServiceOrderRepository orders,
-    IOutbox outbox,
+    SagaOrchestrator saga,
     IUnitOfWork unitOfWork,
     IClock clock)
 {
@@ -27,13 +27,7 @@ public sealed class AbrirOrdemServicoHandler(
 
         var order = opened.Value;
         await orders.AddAsync(order, cancellationToken);
-        outbox.Enqueue(EventRoutes.OrderCreated, new OrderCreatedPayload(
-            Guid.NewGuid(),
-            order.Id,
-            order.ClientId,
-            order.VehicleId,
-            order.Services.Select(service => service.Description).ToList(),
-            clock.UtcNow));
+        saga.OnOpened(order, vehicle);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result.Success(ServiceOrderDto.From(order));
     }

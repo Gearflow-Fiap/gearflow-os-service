@@ -1,3 +1,4 @@
+using GearFlow.Os.Application.Messaging;
 using GearFlow.Os.Domain.Customers;
 using GearFlow.Os.Domain.Orders;
 
@@ -16,6 +17,7 @@ public interface IUnitOfWork
 public interface IOutbox
 {
     void Enqueue(string routingKey, object payload);
+    void Enqueue(OutgoingMessage message);
 }
 
 public interface IInbox
@@ -47,4 +49,5 @@ public interface IServiceOrderRepository
     Task AddAsync(ServiceOrder order, CancellationToken cancellationToken);
     Task<ServiceOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<ServiceOrderPage> ListAsync(ServiceOrderListFilter filter, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ServiceOrder>> ListByStatusAsync(ServiceOrderStatus status, CancellationToken cancellationToken);
 }

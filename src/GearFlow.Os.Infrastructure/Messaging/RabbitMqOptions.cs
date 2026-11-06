@@ -6,8 +6,11 @@ public sealed class RabbitMqOptions
 
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 5672;
+    public string VirtualHost { get; set; } = "/";
     public string Username { get; set; } = "guest";
     public string Password { get; set; } = "guest";
     public string Exchange { get; set; } = "gearflow.events";
+    public string CommandsExchange { get; set; } = "gearflow.commands.v1";
+    public string BillingEventsExchange { get; set; } = "gearflow.events.v1";
     public string Queue { get; set; } = "gearflow.os-service";
 }

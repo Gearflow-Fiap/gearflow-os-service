@@ -65,8 +65,14 @@ internal sealed class FakeDatabase : IClientRepository, IVehicleRepository, ISer
         return Task.FromResult(new ServiceOrderPage(page, filter.Page, filter.PageSize, items.Count));
     }
 
+    public Task<IReadOnlyList<ServiceOrder>> ListByStatusAsync(ServiceOrderStatus status, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<ServiceOrder>>(_orders.Where(order => order.Status == status).ToList());
+
     public void Enqueue(string routingKey, object payload) =>
-        _pendingOutbox.Add(new PendingOutbox(routingKey, System.Text.Json.JsonSerializer.Serialize(payload, OsJson.Options)));
+        Enqueue(new OutgoingMessage { RoutingKey = routingKey, Payload = payload });
+
+    public void Enqueue(OutgoingMessage message) =>
+        _pendingOutbox.Add(new PendingOutbox(message.Queue ?? message.RoutingKey, System.Text.Json.JsonSerializer.Serialize(message.Payload, OsJson.Options)));
 
     public Task<bool> ExistsAsync(Guid messageId, CancellationToken cancellationToken) =>
         Task.FromResult(_inbox.Contains(messageId));

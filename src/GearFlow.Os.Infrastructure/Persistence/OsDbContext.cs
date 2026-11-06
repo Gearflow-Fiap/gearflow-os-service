@@ -53,6 +53,7 @@ public sealed class OsDbContext : DbContext
             order.HasKey(item => item.Id);
             order.Property(item => item.Code).UseIdentityAlwaysColumn();
             order.Property(item => item.Status).HasConversion<string>().HasMaxLength(40);
+            order.Property(item => item.DiagnosticSnapshotJson);
             order.HasIndex(item => item.Status);
             order.HasIndex(item => item.VehicleId);
 
@@ -81,8 +82,11 @@ public sealed class OsDbContext : DbContext
         {
             message.ToTable("outbox_messages");
             message.HasKey(item => item.Id);
-            message.Property(item => item.RoutingKey).HasMaxLength(80).IsRequired();
+            message.Property(item => item.Exchange).HasMaxLength(120);
+            message.Property(item => item.Queue).HasMaxLength(120);
+            message.Property(item => item.RoutingKey).HasMaxLength(200).IsRequired();
             message.Property(item => item.Payload).IsRequired();
+            message.Property(item => item.ContentType).HasMaxLength(80);
             message.HasIndex(item => item.ProcessedOn);
         });
 

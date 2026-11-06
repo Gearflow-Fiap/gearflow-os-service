@@ -65,4 +65,7 @@ public sealed class ServiceOrderRepository(OsDbContext db) : IServiceOrderReposi
 
         return new ServiceOrderPage(items, filter.Page, filter.PageSize, total);
     }
+
+    public async Task<IReadOnlyList<ServiceOrder>> ListByStatusAsync(ServiceOrderStatus status, CancellationToken cancellationToken) =>
+        await db.ServiceOrders.Where(order => order.Status == status).ToListAsync(cancellationToken);
 }

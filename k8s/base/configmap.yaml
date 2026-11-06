@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gearflow-os-config
+data:
+  ASPNETCORE_HTTP_PORTS: "8080"
+  ASPNETCORE_ENVIRONMENT: Production
+  DOTNET_EnableDiagnostics: "0"
+  RabbitMq__Host: rabbitmq
+  RabbitMq__Port: "5672"
+  RabbitMq__VirtualHost: gearflow
+  RabbitMq__Exchange: gearflow.events
+  RabbitMq__CommandsExchange: gearflow.commands.v1
+  RabbitMq__BillingEventsExchange: gearflow.events.v1
+  RabbitMq__Queue: gearflow.os-service
+  Jwt__Issuer: GearFlow.Api
+  Jwt__Audience: GearFlow.Client

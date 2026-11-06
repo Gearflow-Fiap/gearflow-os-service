@@ -1,5 +1,6 @@
 using GearFlow.Os.Application;
 using GearFlow.Os.Application.Abstractions;
+using GearFlow.Os.Application.Saga;
 using GearFlow.Os.Application.UseCases.AbrirOrdemServico;
 using GearFlow.Os.Application.UseCases.AtualizarStatusOs;
 using GearFlow.Os.Application.UseCases.CadastrarCliente;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IServiceOrderRepository, ServiceOrderRepository>();
         services.AddSingleton<IClock, SystemClock>();
 
+        services.AddScoped<SagaOrchestrator>();
         services.AddScoped<CadastrarClienteHandler>();
         services.AddScoped<CadastrarVeiculoHandler>();
         services.AddScoped<AbrirOrdemServicoHandler>();

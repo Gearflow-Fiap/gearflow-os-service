@@ -1,4 +1,6 @@
 using FluentAssertions;
+using GearFlow.Os.Application.Messaging;
+using GearFlow.Os.Application.Saga;
 using GearFlow.Os.Application.UseCases.AbrirOrdemServico;
 using GearFlow.Os.Application.UseCases.AtualizarStatusOs;
 using GearFlow.Os.Application.UseCases.CadastrarCliente;
@@ -31,21 +33,27 @@ public class CicloOrdemServicoSteps
     [When(@"a recepcionista abre uma OS com o serviço ""(.*)""")]
     public async Task QuandoAbre(string servico)
     {
-        var opened = await new AbrirOrdemServicoHandler(_db, _db, _db, _db, _clock)
+        var opened = await new AbrirOrdemServicoHandler(_db, _db, new SagaOrchestrator(_db, _clock), _db, _clock)
             .Handle(new AbrirOrdemServicoCommand(_vehicleId, [servico]), CancellationToken.None);
         opened.IsSuccess.Should().BeTrue();
         _orderId = opened.Value.Id;
     }
 
-    [When("chega o evento OrcamentoGerado")]
+    [When("chega o evento BudgetGenerated")]
     public async Task QuandoOrcamentoGerado() =>
         (await Status().QuandoOrcamentoGerado(Guid.NewGuid(), _orderId, CancellationToken.None)).IsSuccess.Should().BeTrue();
 
-    [When("chega o evento OrcamentoApproved")]
+    [When("chega o evento BudgetApproved")]
     public async Task QuandoAprovado() =>
         (await Status().QuandoOrcamentoAprovado(Guid.NewGuid(), _orderId, CancellationToken.None)).IsSuccess.Should().BeTrue();
 
-    [When("chega o evento OperationCompleted")]
+    [When("chega o evento PaymentConfirmed")]
+    public async Task QuandoPago() =>
+        (await Status().Handle(
+            new IncomingSagaMessage(SagaEventTypes.PaymentConfirmed, Guid.NewGuid(), _orderId, null, Guid.NewGuid(), null, null, "{}"),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+    [When("chega o evento ExecutionFinished")]
     public async Task QuandoOperacao() =>
         (await Status().QuandoOperacaoConcluida(Guid.NewGuid(), _orderId, CancellationToken.None)).IsSuccess.Should().BeTrue();
 
@@ -74,5 +82,6 @@ public class CicloOrdemServicoSteps
         order.Value.History.Should().Contain(item => item.Status == status);
     }
 
-    private AtualizarStatusOsHandler Status() => new(_db, _db, _db, _clock);
+    private AtualizarStatusOsHandler Status() =>
+        new(_db, _db, _db, new SagaOrchestrator(_db, _clock), _db, _clock);
 }

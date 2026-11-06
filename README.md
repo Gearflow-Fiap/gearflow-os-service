@@ -1,46 +1,84 @@
 # GearFlow — OS Service
 
-Microsserviço da **Ordem de Serviço**. Roda inteiro na máquina: API, PostgreSQL e RabbitMQ. Não chama nuvem nem Mercado Pago.
+Microsserviço da **Ordem de Serviço** e **orquestrador da Saga** da Fase 4. Roda na máquina: API, PostgreSQL e RabbitMQ.
 
-Este serviço é dono do cliente, do veículo, da abertura da OS, do status e do histórico. Orçamento, operação e estoque entram depois, por evento. A saga é coreografada: este serviço publica `os.created` e reage aos eventos dos outros.
+Este serviço é dono do cliente, do veículo, da abertura da OS, do status global e da coordenação persistente do fluxo. Billing, Operation e Inventory **executam comandos e devolvem eventos**; o OS decide o próximo passo e as compensações.
+
+## Escolha da Saga: orquestrada
+
+A Fase 4 aceita orquestração ou coreografia. Este serviço adota **orquestração**, alinhado ao que Inventory e Budget já documentam:
+
+- O OS publica comandos com destinatário único.
+- Os participantes respondem com fatos.
+- Compensações (`ReleaseStock`, `CancelBudget`, `CancelOperation`) saem daqui, não de um segundo orquestrador.
+
+Justificativa: Inventory já consome `ReserveStock`/`ReleaseStock`/`ConsumeStock`, Billing já consome `GenerateBudget`/`RequestPayment`/`CancelBudget`/`RefundPayment`, e Operation já consome `StartDiagnostic`/`StartExecution`/`CancelOperation`. Sem um orquestrador, esses contratos ficam órfãos.
 
 ## Status
 
 ```
-Created → WaitingOrcamento → Paid → InProgress → Completed
-                              └─ rejeição → Cancelled
+Created → WaitingOrcamento → AwaitingStock → AwaitingPayment → InProgress → Completed
+                 │                  └ AwaitingParts (estoque insuficiente)
+                 └ rejeição → Cancelled
 ```
 
-`Paid` fica no histórico. Depois do pagamento o estado gravado é `InProgress`. A entrega só conclui a OS se a operação já tiver terminado.
+Sem peças, a aprovação pula `AwaitingStock` e vai para `AwaitingPayment`. `Paid` fica no histórico na confirmação do pagamento. A entrega exige execução concluída e, se houve reserva, baixa de estoque (`StockConsumed`).
+
+## Contratos de mensageria
+
+O OS fala os três idiomas que já existem — não inventa um quarto:
+
+| Destino | Como publica | Nome |
+|---|---|---|
+| Broker / legado | topic `gearflow.events` | `os.created` e `os.order-created.v1` |
+| Billing | topic `gearflow.commands.v1` + envelope v1 (`Producer=gearflow-os-service`) | `billing.GenerateBudget`, `billing.RequestPayment`, `billing.CancelBudget` |
+| Operation | fila MassTransit | `operation-start-diagnostic`, `operation-start-execution`, `operation-cancel-operation` |
+| Inventory | fila MassTransit | `inventory-reserve-stock`, `inventory-release-stock`, `inventory-consume-stock` |
+
+Consome:
+
+- `gearflow.events.v1` / `gearflow-budget-service.*`
+- fanouts `operation.diagnostic-finished`, `operation.execution-finished`, …
+- fanouts `inventory.stock-reserved`, `inventory.stock-insufficient`, `inventory.stock-consumed`, `inventory.stock-replenished`
+- rotas legadas `budget.generated`, `budget.approved`, `operation.completed` (ainda aceitas)
+
+Com o broker do `gearflow-infra-broker`, use `RabbitMq__VirtualHost=gearflow`.
 
 ## Subir local
-
-Na pasta deste repositório:
 
 ```powershell
 docker compose up --build
 ```
 
-- API: http://localhost:5080
-- Scalar (documentação): http://localhost:5080/scalar
-- OpenAPI: http://localhost:5080/openapi/v1.json
-- RabbitMQ: http://localhost:15672 (`guest` / `guest`)
-- Postgres no host: `localhost:5433`, banco `gearflow_os`, usuário e senha `gearflow`
+Se o Postgres local já existia **antes desta versão**, recrie o volume (`docker compose down -v`) — o schema ganhou colunas da Saga.
 
-Para desenvolver a API fora do container, suba só a infraestrutura e rode o projeto:
+- API: http://localhost:5080
+- Scalar: http://localhost:5080/scalar
+- OpenAPI: http://localhost:5080/openapi/v1.json
+- Health: `/health/live` e `/health/ready`
+- RabbitMQ: http://localhost:15672 (`guest` / `guest`)
+- Postgres no host: `localhost:5433`
 
 ```powershell
 docker compose up -d postgres rabbitmq
 dotnet run --project src/GearFlow.Os.Api
 ```
 
-O schema é criado no startup.
+JWT de desenvolvimento (o mesmo segredo HMAC do Inventory):
+
+```http
+POST /api/dev/token
+```
+
+Use `Authorization: Bearer <accessToken>` nas rotas `/api/*`.
 
 ## Fluxo local sem os outros serviços
 
-Enquanto Orçamento, Operação e Estoque não existem, o endpoint de desenvolvimento publica o mesmo efeito que a fila. Ele só responde com `ASPNETCORE_ENVIRONMENT=Development`.
+Em Development, `POST /api/dev/eventos` injeta o mesmo efeito que a fila.
 
 ```http
+POST /api/dev/token
+
 POST /api/clientes
 { "name": "Ana Souza", "document": "529.982.247-25", "email": "ana@oficina.com" }
 
@@ -51,43 +89,21 @@ POST /api/ordens-servico
 { "vehicleId": "<id>", "services": ["Troca de óleo"] }
 
 POST /api/dev/eventos
-{ "tipo": "OrcamentoGerado", "ordemServicoId": "<id>" }
+{ "tipo": "BudgetGenerated", "ordemServicoId": "<id>" }
 
 POST /api/dev/eventos
-{ "tipo": "OrcamentoApproved", "ordemServicoId": "<id>" }
+{ "tipo": "BudgetApproved", "ordemServicoId": "<id>" }
 
 POST /api/dev/eventos
-{ "tipo": "OperationCompleted", "ordemServicoId": "<id>" }
+{ "tipo": "PaymentConfirmed", "ordemServicoId": "<id>" }
+
+POST /api/dev/eventos
+{ "tipo": "ExecutionFinished", "ordemServicoId": "<id>" }
 
 POST /api/ordens-servico/<id>/entrega
-
-GET /api/ordens-servico/<id>
 ```
 
-`tipo` também aceita `OrcamentoRejected`, que cancela a OS.
-
-A abertura grava `os.created` na outbox e o dispatcher publica no exchange `gearflow.events`. Dá para ver a mensagem no painel do RabbitMQ.
-
-## Eventos
-
-A primeira parte da rota é o nome do repositório, sem `gearflow-` e sem `-service`. Assim o evento indica qual serviço publicou:
-
-| Repositório | Prefixo |
-|---|---|
-| `gearflow-os-service` | `os` |
-| `gearflow-budget-service` | `budget` |
-| `gearflow-operation-service` | `operation` |
-| `gearflow-inventory-service` | `inventory` |
-
-| Rota | Direção | Efeito neste serviço |
-|---|---|---|
-| `os.created` | publica | OS aberta |
-| `budget.generated` | consome | `WaitingOrcamento` |
-| `budget.approved` | consome | histórico `Paid`, estado `InProgress` |
-| `budget.rejected` | consome | `Cancelled` |
-| `operation.completed` | consome | libera a entrega |
-
-O corpo dos eventos consumidos é JSON: `{ "messageId": "<guid>", "serviceOrderId": "<guid>" }`. O mesmo `messageId` não muda a OS duas vezes. A publicação e a gravação da OS saem na mesma transação (outbox).
+`tipo` também aceita os nomes antigos (`OrcamentoGerado`, `OrcamentoApproved`, `OperationCompleted`) e os de estoque (`StockReserved`, `StockInsufficient`, `StockConsumed`).
 
 ## Testes
 
@@ -95,8 +111,15 @@ O corpo dos eventos consumidos é JSON: `{ "messageId": "<guid>", "serviceOrderI
 dotnet test
 ```
 
-Há testes de unidade da máquina de estados e um cenário BDD (Reqnroll) do ciclo abrir → status → histórico → entrega.
+Há testes de unidade da máquina de estados, da orquestração e um cenário BDD (Reqnroll) do ciclo abrir → orçamento → pagamento → execução → entrega. O CI no GitHub Actions aplica gate de cobertura de 80% em Domain + Application.
+
+## Observabilidade e entrega
+
+- Traces/métricas OpenTelemetry (OTLP quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido)
+- Probes `/health/live` e `/health/ready` (Postgres + RabbitMQ)
+- Manifests em [`k8s/base`](k8s/base)
+- Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ## Stack
 
-.NET 10, PostgreSQL 16, RabbitMQ 3, EF Core, outbox/inbox. Tudo pelo `docker-compose.yml`.
+.NET 10, PostgreSQL 16, RabbitMQ 3, EF Core, outbox/inbox, JWT HS256. Tudo pelo `docker-compose.yml`.

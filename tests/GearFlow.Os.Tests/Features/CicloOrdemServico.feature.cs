@@ -17,21 +17,21 @@ namespace GearFlow.Os.Tests.Features
     
     [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Reqnroll", "2.0.0.0")]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    public partial class CicloLocalDaOrdemDeServicoFeature : object, Xunit.IClassFixture<CicloLocalDaOrdemDeServicoFeature.FixtureData>, Xunit.IAsyncLifetime
+    public partial class CicloOrquestradoDaOrdemDeServicoFeature : object, Xunit.IClassFixture<CicloOrquestradoDaOrdemDeServicoFeature.FixtureData>, Xunit.IAsyncLifetime
     {
         
         private global::Reqnroll.ITestRunner testRunner;
         
         private static string[] featureTags = ((string[])(null));
         
-        private static global::Reqnroll.FeatureInfo featureInfo = new global::Reqnroll.FeatureInfo(new global::System.Globalization.CultureInfo("pt"), "Features", "Ciclo local da ordem de serviço", null, global::Reqnroll.ProgrammingLanguage.CSharp, featureTags);
+        private static global::Reqnroll.FeatureInfo featureInfo = new global::Reqnroll.FeatureInfo(new global::System.Globalization.CultureInfo("pt"), "Features", "Ciclo orquestrado da ordem de serviço", null, global::Reqnroll.ProgrammingLanguage.CSharp, featureTags);
         
         private Xunit.Abstractions.ITestOutputHelper _testOutputHelper;
         
 #line 1 "CicloOrdemServico.feature"
 #line hidden
         
-        public CicloLocalDaOrdemDeServicoFeature(CicloLocalDaOrdemDeServicoFeature.FixtureData fixtureData, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
+        public CicloOrquestradoDaOrdemDeServicoFeature(CicloOrquestradoDaOrdemDeServicoFeature.FixtureData fixtureData, Xunit.Abstractions.ITestOutputHelper testOutputHelper)
         {
             this._testOutputHelper = testOutputHelper;
         }
@@ -127,14 +127,14 @@ namespace GearFlow.Os.Tests.Features
             await this.TestTearDownAsync();
         }
         
-        [Xunit.SkippableFactAttribute(DisplayName="Abrir a OS, atualizar o status e consultar o histórico")]
-        [Xunit.TraitAttribute("FeatureTitle", "Ciclo local da ordem de serviço")]
-        [Xunit.TraitAttribute("Description", "Abrir a OS, atualizar o status e consultar o histórico")]
-        public async global::System.Threading.Tasks.Task AbrirAOSAtualizarOStatusEConsultarOHistorico()
+        [Xunit.SkippableFactAttribute(DisplayName="Abrir a OS e concluir a Saga até a entrega")]
+        [Xunit.TraitAttribute("FeatureTitle", "Ciclo orquestrado da ordem de serviço")]
+        [Xunit.TraitAttribute("Description", "Abrir a OS e concluir a Saga até a entrega")]
+        public async global::System.Threading.Tasks.Task AbrirAOSEConcluirASagaAteAEntrega()
         {
             string[] tagsOfScenario = ((string[])(null));
             global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
-            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Abrir a OS, atualizar o status e consultar o histórico", null, tagsOfScenario, argumentsOfScenario, featureTags);
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Abrir a OS e concluir a Saga até a entrega", null, tagsOfScenario, argumentsOfScenario, featureTags);
 #line 4
   this.ScenarioInitialize(scenarioInfo);
 #line hidden
@@ -158,30 +158,36 @@ namespace GearFlow.Os.Tests.Features
     await testRunner.AndAsync("a consulta devolve o histórico com \"Ordem de serviço aberta.\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
 #line hidden
 #line 9
-    await testRunner.WhenAsync("chega o evento OrcamentoGerado", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+    await testRunner.WhenAsync("chega o evento BudgetGenerated", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
 #line hidden
 #line 10
     await testRunner.ThenAsync("o status da OS é \"WaitingOrcamento\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
 #line hidden
 #line 11
-    await testRunner.WhenAsync("chega o evento OrcamentoApproved", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+    await testRunner.WhenAsync("chega o evento BudgetApproved", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
 #line hidden
 #line 12
-    await testRunner.ThenAsync("o status da OS é \"InProgress\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+    await testRunner.ThenAsync("o status da OS é \"AwaitingPayment\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
 #line hidden
 #line 13
-    await testRunner.AndAsync("o histórico contém o status \"Paid\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+    await testRunner.WhenAsync("chega o evento PaymentConfirmed", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
 #line hidden
 #line 14
-    await testRunner.WhenAsync("chega o evento OperationCompleted", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+    await testRunner.ThenAsync("o status da OS é \"InProgress\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
 #line hidden
 #line 15
-    await testRunner.AndAsync("a recepcionista registra a entrega", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+    await testRunner.AndAsync("o histórico contém o status \"Paid\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
 #line hidden
 #line 16
-    await testRunner.ThenAsync("o status da OS é \"Completed\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+    await testRunner.WhenAsync("chega o evento ExecutionFinished", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
 #line hidden
 #line 17
+    await testRunner.AndAsync("a recepcionista registra a entrega", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+#line 18
+    await testRunner.ThenAsync("o status da OS é \"Completed\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+#line hidden
+#line 19
     await testRunner.AndAsync("o histórico contém o status \"Completed\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
 #line hidden
             }
@@ -195,12 +201,12 @@ namespace GearFlow.Os.Tests.Features
             
             async global::System.Threading.Tasks.Task Xunit.IAsyncLifetime.InitializeAsync()
             {
-                await CicloLocalDaOrdemDeServicoFeature.FeatureSetupAsync();
+                await CicloOrquestradoDaOrdemDeServicoFeature.FeatureSetupAsync();
             }
             
             async global::System.Threading.Tasks.Task Xunit.IAsyncLifetime.DisposeAsync()
             {
-                await CicloLocalDaOrdemDeServicoFeature.FeatureTearDownAsync();
+                await CicloOrquestradoDaOrdemDeServicoFeature.FeatureTearDownAsync();
             }
         }
     }
