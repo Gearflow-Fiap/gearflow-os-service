@@ -5,15 +5,15 @@ namespace GearFlow.Os.Tests;
 
 public class IncomingMessageParserTests
 {
-    [Fact]
-    public void Interpreta_evento_legado_do_os()
+    [Theory]
+    [InlineData("budget.generated")]
+    [InlineData("budget.approved")]
+    [InlineData("operation.completed")]
+    public void Ignora_rotas_legadas_sem_tipo_declarado(string routingKey)
     {
         var json = """{"messageId":"11111111-1111-1111-1111-111111111111","serviceOrderId":"22222222-2222-2222-2222-222222222222"}""";
-        var parsed = IncomingMessageParser.Parse("budget.generated", json);
 
-        parsed.Should().NotBeNull();
-        parsed!.Type.Should().Be(SagaEventTypes.BudgetGenerated);
-        parsed.ServiceOrderId.Should().Be(Guid.Parse("22222222-2222-2222-2222-222222222222"));
+        IncomingMessageParser.Parse(routingKey, json).Should().BeNull();
     }
 
     [Fact]

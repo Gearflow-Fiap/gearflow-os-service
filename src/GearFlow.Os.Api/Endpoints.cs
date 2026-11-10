@@ -46,7 +46,7 @@ public static class Endpoints
                 await handler.Handle(new AbrirOrdemServicoCommand(body.VehicleId, body.Services ?? []), ct),
                 order => Results.Created($"/api/ordens-servico/{order.Id}", order)))
             .WithSummary("Abre ordem de serviço")
-            .WithDescription("Abre a OS e dispara a Saga (os.created, os.order-created.v1 e StartDiagnostic).");
+            .WithDescription("Abre a OS e dispara a Saga (os.order-created.v1 e StartDiagnostic).");
         ordens.MapGet("/", async (int? page, int? pageSize, bool? incluirEncerradas, ConsultarOrdemServicoHandler handler, CancellationToken ct) =>
             Results.Ok(await handler.Listar(page ?? 1, pageSize ?? 20, incluirEncerradas ?? false, ct)))
             .WithSummary("Lista ordens de serviço").WithDescription("Lista paginada das OS.");

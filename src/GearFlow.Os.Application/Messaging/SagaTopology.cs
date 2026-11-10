@@ -38,14 +38,6 @@ public static class SagaTopology
         "inventory.stock-consumed",
         "inventory.stock-replenished"
     ];
-
-    public static readonly string[] LegacyEventRoutes =
-    [
-        EventRoutes.OrcamentoGerado,
-        EventRoutes.OrcamentoApproved,
-        EventRoutes.OrcamentoRejected,
-        EventRoutes.OperationCompleted
-    ];
 }
 
 public static class SagaEventTypes

@@ -53,9 +53,9 @@ public static class IncomingMessageParser
         {
             "diagnostic-finished" or "DiagnosticFinished" => SagaEventTypes.DiagnosticFinished,
             "diagnostic-failed" or "DiagnosticFailed" => SagaEventTypes.DiagnosticFailed,
-            "BudgetGenerated" or "generated" => SagaEventTypes.BudgetGenerated,
-            "BudgetApproved" or "approved" => SagaEventTypes.BudgetApproved,
-            "BudgetRejected" or "rejected" => SagaEventTypes.BudgetRejected,
+            "BudgetGenerated" => SagaEventTypes.BudgetGenerated,
+            "BudgetApproved" => SagaEventTypes.BudgetApproved,
+            "BudgetRejected" => SagaEventTypes.BudgetRejected,
             "BudgetGenerationFailed" => SagaEventTypes.BudgetGenerationFailed,
             "stock-reserved" or "StockReserved" => SagaEventTypes.StockReserved,
             "stock-insufficient" or "StockInsufficient" => SagaEventTypes.StockInsufficient,
@@ -65,20 +65,13 @@ public static class IncomingMessageParser
             "PaymentConfirmed" => SagaEventTypes.PaymentConfirmed,
             "PaymentFailed" => SagaEventTypes.PaymentFailed,
             "PaymentRefunded" => SagaEventTypes.PaymentRefunded,
-            "execution-finished" or "ExecutionFinished" or "completed" => SagaEventTypes.ExecutionFinished,
+            "execution-finished" or "ExecutionFinished" => SagaEventTypes.ExecutionFinished,
             "canceled" or "OperationCanceled" => SagaEventTypes.OperationCanceled,
             "command-rejected" or "OperationCommandRejected" => SagaEventTypes.OperationCommandRejected,
             "cancellation-rejected" or "OperationCancellationRejected" => SagaEventTypes.OperationCancellationRejected,
             "BudgetCanceled" => SagaEventTypes.BudgetCanceled,
             "PaymentRequested" => SagaEventTypes.PaymentRequested,
-            _ => routingKey switch
-            {
-                EventRoutes.OrcamentoGerado => SagaEventTypes.BudgetGenerated,
-                EventRoutes.OrcamentoApproved => SagaEventTypes.BudgetApproved,
-                EventRoutes.OrcamentoRejected => SagaEventTypes.BudgetRejected,
-                EventRoutes.OperationCompleted => SagaEventTypes.ExecutionFinished,
-                _ => null
-            }
+            _ => null
         };
     }
 

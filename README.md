@@ -48,7 +48,7 @@ O OS fala os três idiomas que já existem — não inventa um quarto:
 
 | Destino | Como publica | Nome |
 |---|---|---|
-| Broker / legado | topic `gearflow.events` | `os.created` e `os.order-created.v1` |
+| Broker (informativo) | topic `gearflow.events` | `os.order-created.v1` |
 | Billing | topic `gearflow.commands.v1` + envelope v1 (`Producer=gearflow-os-service`) | `billing.GenerateBudget`, `billing.RequestPayment`, `billing.CancelBudget`, `billing.RefundPayment` |
 | Operation | fila MassTransit | `operation-start-diagnostic`, `operation-start-execution`, `operation-cancel-operation` |
 | Inventory | fila MassTransit | `inventory-reserve-stock`, `inventory-release-stock`, `inventory-consume-stock` |
@@ -58,7 +58,6 @@ Consome:
 - `gearflow.events.v1` / `gearflow-budget-service.*`
 - fanouts `operation.diagnostic-finished`, `operation.diagnostic-failed`, `operation.execution-finished`, `operation.canceled`, `operation.command-rejected`, `operation.cancellation-rejected`
 - fanouts `inventory.stock-reserved`, `inventory.stock-insufficient`, `inventory.stock-released`, `inventory.stock-consumed`, `inventory.stock-replenished`
-- rotas legadas `budget.generated`, `budget.approved`, `operation.completed` (ainda aceitas)
 
 Com o broker do `gearflow-infra-broker`, use `RabbitMq__VirtualHost=gearflow`.
 

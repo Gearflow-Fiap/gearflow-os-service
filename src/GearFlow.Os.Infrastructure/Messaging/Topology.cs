@@ -12,9 +12,6 @@ internal static class Topology
         await channel.ExchangeDeclareAsync(settings.BillingEventsExchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
         await channel.QueueDeclareAsync(settings.Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: cancellationToken);
 
-        foreach (var route in SagaTopology.LegacyEventRoutes)
-            await channel.QueueBindAsync(settings.Queue, settings.Exchange, route, cancellationToken: cancellationToken);
-
         await channel.QueueBindAsync(settings.Queue, settings.BillingEventsExchange, "gearflow-budget-service.*", cancellationToken: cancellationToken);
 
         foreach (var exchange in SagaTopology.OperationEventExchanges.Concat(SagaTopology.InventoryEventExchanges))

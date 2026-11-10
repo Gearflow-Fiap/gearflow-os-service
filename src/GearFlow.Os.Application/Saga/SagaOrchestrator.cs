@@ -19,7 +19,6 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
             order.Services.Select(service => service.Description).ToList(),
             occurred);
 
-        outbox.Enqueue(EventRoutes.OrderCreated, payload);
         outbox.Enqueue(new OutgoingMessage
         {
             Exchange = SagaTopology.OsEventsExchange,

@@ -2,12 +2,8 @@ namespace GearFlow.Os.Application.Messaging;
 
 public static class EventRoutes
 {
-    public const string OrderCreated = "os.created";
+    /// <summary>Evento informativo de abertura, publicado em gearflow.events. Não dispara nenhuma etapa da Saga.</summary>
     public const string OrderCreatedV1 = "os.order-created.v1";
-    public const string OrcamentoGerado = "budget.generated";
-    public const string OrcamentoApproved = "budget.approved";
-    public const string OrcamentoRejected = "budget.rejected";
-    public const string OperationCompleted = "operation.completed";
 }
 
 public sealed record OrderCreatedPayload(
