@@ -41,6 +41,16 @@ spec:
                 secretKeyRef:
                   name: rabbitmq-os-credentials
                   key: password
+            # Licença do New Relic, do Secret que o gearflow-infra-k8s cria no namespace. Opcional: sem ela só não exporta.
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newrelic-apm-secret
+                  key: NEW_RELIC_LICENSE_KEY
+                  optional: true
+            # O $(...) é expandido pelo Kubernetes e exige que NEW_RELIC_LICENSE_KEY venha antes nesta lista.
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              value: "api-key=$(NEW_RELIC_LICENSE_KEY)"
           resources:
             requests:
               cpu: 100m

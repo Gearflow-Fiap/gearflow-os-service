@@ -14,5 +14,9 @@ data:
   RabbitMq__CommandsExchange: gearflow.commands.v1
   RabbitMq__BillingEventsExchange: gearflow.events.v1
   RabbitMq__Queue: gearflow.os-service
+  # Observabilidade da Fase 3: traces e métricas por OTLP para o New Relic (mesmo destino do Inventory).
+  # O header api-key sai da licença do Secret newrelic-apm-secret (OTEL_EXPORTER_OTLP_HEADERS no Deployment).
+  OTEL_EXPORTER_OTLP_ENDPOINT: https://otlp.nr-data.net:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
   Jwt__Issuer: GearFlow.Api
   Jwt__Audience: GearFlow.Client

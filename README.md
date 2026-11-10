@@ -129,14 +129,19 @@ POST /api/ordens-servico/<id>/entrega
 dotnet test
 ```
 
-Há testes de unidade da máquina de estados, da orquestração e um cenário BDD (Reqnroll) do ciclo abrir → orçamento → pagamento → execução → entrega. O CI no GitHub Actions aplica gate de cobertura de 80% em Domain + Application.
+Há testes de unidade da máquina de estados, da orquestração e dos caminhos de falha (compensações), além de dois cenários BDD (Reqnroll): o ciclo completo abrir → orçamento → pagamento → execução → entrega e o pagamento recusado com compensação.
+
+O CI no GitHub Actions aplica gate de cobertura de 80% de linhas em Domain + Application. Primeira execução no GitHub (10/11/2026, job "Build + testes + cobertura"): gate aprovado; o relatório Cobertura fica no artefato `coverage` de cada execução em [Actions](https://github.com/Gearflow-Fiap/gearflow-os-service/actions/workflows/ci.yml). Medição local de 05/11/2026: 82,2% de linhas.
 
 ## Observabilidade e entrega
 
-- Traces/métricas OpenTelemetry (OTLP quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido)
+- Traces/métricas OpenTelemetry por OTLP; no Kubernetes vão para o New Relic (veja [`k8s/README.md`](k8s/README.md))
 - Probes `/health/live` e `/health/ready` (Postgres + RabbitMQ)
 - Manifests em [`k8s/base`](k8s/base)
-- Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+- [`ci.yml`](.github/workflows/ci.yml): build, testes, gate de cobertura e SonarCloud (liga com `SONAR_PROJECT_KEY`, `SONAR_ORG` e o secret `SONAR_TOKEN`)
+- [`docker-publish.yml`](.github/workflows/docker-publish.yml): imagem no GHCR (`ghcr.io/gearflow-fiap/gearflow-os-service`)
+- [`delivery.yml`](.github/workflows/delivery.yml): deploy no EKS depois do CI verde na `main` (liga com `DEPLOY_ENABLED=true`)
+- A `main` é protegida: merge só por PR, com aprovação e o CI verde
 
 ## Stack
 
