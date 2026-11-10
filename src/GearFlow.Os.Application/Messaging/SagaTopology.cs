@@ -26,7 +26,8 @@ public static class SagaTopology
         "operation.diagnostic-failed",
         "operation.execution-finished",
         "operation.canceled",
-        "operation.command-rejected"
+        "operation.command-rejected",
+        "operation.cancellation-rejected"
     ];
 
     public static readonly string[] InventoryEventExchanges =
@@ -65,6 +66,10 @@ public static class SagaEventTypes
     public const string PaymentRefunded = "PaymentRefunded";
     public const string ExecutionFinished = "ExecutionFinished";
     public const string OperationCanceled = "OperationCanceled";
+    public const string OperationCommandRejected = "OperationCommandRejected";
+    public const string OperationCancellationRejected = "OperationCancellationRejected";
+    public const string BudgetCanceled = "BudgetCanceled";
+    public const string PaymentRequested = "PaymentRequested";
 }
 
 public sealed record IncomingSagaMessage(
@@ -75,4 +80,6 @@ public sealed record IncomingSagaMessage(
     Guid? PaymentId,
     decimal? Amount,
     string? Currency,
-    string RawBody);
+    string RawBody,
+    string? CommandName = null,
+    string? Code = null);

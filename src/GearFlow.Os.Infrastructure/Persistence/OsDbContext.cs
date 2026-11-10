@@ -54,6 +54,8 @@ public sealed class OsDbContext : DbContext
             order.Property(item => item.Code).UseIdentityAlwaysColumn();
             order.Property(item => item.Status).HasConversion<string>().HasMaxLength(40);
             order.Property(item => item.DiagnosticSnapshotJson);
+            order.Property(item => item.ApprovedAmount).HasPrecision(12, 2);
+            order.Property(item => item.ApprovedCurrency).HasMaxLength(3);
             order.HasIndex(item => item.Status);
             order.HasIndex(item => item.VehicleId);
 

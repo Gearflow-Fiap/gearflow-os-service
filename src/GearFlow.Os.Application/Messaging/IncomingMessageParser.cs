@@ -32,8 +32,10 @@ public static class IncomingMessageParser
         var paymentId = ReadGuid(payload, "paymentId") ?? ReadGuid(payload, "PaymentId");
         var amount = ReadDecimal(payload, "amount") ?? ReadDecimal(payload, "totalAmount");
         var currency = ReadString(payload, "currency");
+        var commandName = ReadString(payload, "commandName") ?? ReadString(payload, "CommandName");
+        var code = ReadString(payload, "code") ?? ReadString(payload, "Code");
 
-        return new IncomingSagaMessage(type, messageId, serviceOrderId, budgetId, paymentId, amount, currency, json);
+        return new IncomingSagaMessage(type, messageId, serviceOrderId, budgetId, paymentId, amount, currency, json, commandName, code);
     }
 
     private static string? CanonicalType(string routingKey, JsonElement root)
@@ -65,6 +67,10 @@ public static class IncomingMessageParser
             "PaymentRefunded" => SagaEventTypes.PaymentRefunded,
             "execution-finished" or "ExecutionFinished" or "completed" => SagaEventTypes.ExecutionFinished,
             "canceled" or "OperationCanceled" => SagaEventTypes.OperationCanceled,
+            "command-rejected" or "OperationCommandRejected" => SagaEventTypes.OperationCommandRejected,
+            "cancellation-rejected" or "OperationCancellationRejected" => SagaEventTypes.OperationCancellationRejected,
+            "BudgetCanceled" => SagaEventTypes.BudgetCanceled,
+            "PaymentRequested" => SagaEventTypes.PaymentRequested,
             _ => routingKey switch
             {
                 EventRoutes.OrcamentoGerado => SagaEventTypes.BudgetGenerated,

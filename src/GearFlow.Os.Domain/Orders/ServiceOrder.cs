@@ -22,6 +22,8 @@ public sealed class ServiceOrder : Entity
     public bool StockConsumed { get; private set; }
     public Guid? BudgetId { get; private set; }
     public Guid? PaymentId { get; private set; }
+    public decimal? ApprovedAmount { get; private set; }
+    public string? ApprovedCurrency { get; private set; }
     public string? DiagnosticSnapshotJson { get; private set; }
     public DateTime CreatedOn { get; private set; }
     public DateTime? UpdatedOn { get; private set; }
@@ -74,6 +76,16 @@ public sealed class ServiceOrder : Entity
     {
         if (budgetId != Guid.Empty)
             BudgetId = budgetId;
+        UpdatedOn = nowUtc;
+    }
+
+    /// <summary>Guarda o total aprovado pelo Billing; é o valor exato que o RequestPayment precisa enviar.</summary>
+    public void CaptureApprovedAmount(decimal? amount, string? currency, DateTime nowUtc)
+    {
+        if (amount is not { } value || value <= 0)
+            return;
+        ApprovedAmount = value;
+        ApprovedCurrency = string.IsNullOrWhiteSpace(currency) ? "BRL" : currency.Trim().ToUpperInvariant();
         UpdatedOn = nowUtc;
     }
 
@@ -158,9 +170,29 @@ public sealed class ServiceOrder : Entity
             return Result.Success();
         if (Status != ServiceOrderStatus.AwaitingPayment)
             return Conflict("Os.NotAwaitingPayment", "Falha de pagamento fora do estado esperado.");
+        return Move(ServiceOrderStatus.Cancelled, "Pagamento recusado. OS cancelada e compensações enviadas.", nowUtc);
+    }
+
+    /// <summary>
+    /// Cancela a OS por falha em qualquer etapa da Saga (ou a pedido da recepção) enquanto a execução não terminou.
+    /// Depois que o Operation conclui a execução, só resta a entrega.
+    /// </summary>
+    public Result CancelBySagaFailure(string reason, DateTime nowUtc)
+    {
+        if (Status == ServiceOrderStatus.Cancelled)
+            return Result.Success();
+        if (Status == ServiceOrderStatus.Completed)
+            return Conflict("Os.Completed", "A OS já foi concluída.");
+        if (ExecutionFinished)
+            return Conflict("Os.ExecutionFinished", "A execução já terminou; a OS não pode mais ser cancelada.");
+        return Move(ServiceOrderStatus.Cancelled, Truncate($"OS cancelada: {reason}"), nowUtc);
+    }
+
+    /// <summary>Registra no histórico um evento informativo da Saga sem mudar o status.</summary>
+    public void Note(string message, DateTime nowUtc)
+    {
         UpdatedOn = nowUtc;
-        _history.Add(new ServiceOrderHistory(Guid.NewGuid(), Status, "Pagamento falhou. Compensando reserva de estoque.", nowUtc));
-        return Result.Success();
+        _history.Add(new ServiceOrderHistory(Guid.NewGuid(), Status, Truncate(message), nowUtc));
     }
 
     public Result ApplyOperationCompleted(DateTime nowUtc)
@@ -211,6 +243,9 @@ public sealed class ServiceOrder : Entity
         UpdatedOn = nowUtc;
         _history.Add(new ServiceOrderHistory(Guid.NewGuid(), status, message, nowUtc));
     }
+
+    private static string Truncate(string message) =>
+        message.Length <= 300 ? message : message[..300];
 
     private static Result Conflict(string code, string message) => Result.Failure(Error.Conflict(code, message));
 }

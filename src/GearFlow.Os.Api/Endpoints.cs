@@ -7,6 +7,7 @@ using GearFlow.Os.Application.UseCases.AbrirOrdemServico;
 using GearFlow.Os.Application.UseCases.AtualizarStatusOs;
 using GearFlow.Os.Application.UseCases.CadastrarCliente;
 using GearFlow.Os.Application.UseCases.CadastrarVeiculo;
+using GearFlow.Os.Application.UseCases.CancelarOrdemServico;
 using GearFlow.Os.Application.UseCases.ConsultarCadastro;
 using GearFlow.Os.Application.UseCases.ConsultarOrdemServico;
 using GearFlow.Os.Application.UseCases.FinalizarOrdemServico;
@@ -55,6 +56,10 @@ public static class Endpoints
         ordens.MapPost("/{id:guid}/entrega", async (Guid id, FinalizarOrdemServicoHandler handler, CancellationToken ct) =>
             HttpResults.From(await handler.Handle(id, ct)))
             .WithSummary("Entrega o veículo").WithDescription("Conclui a OS após execução e baixa de estoque.");
+        ordens.MapPost("/{id:guid}/cancelamento", async (Guid id, CancelServiceOrderRequest? body, CancelarOrdemServicoHandler handler, CancellationToken ct) =>
+            HttpResults.From(await handler.Handle(id, body?.Motivo, ct)))
+            .WithSummary("Cancela a ordem de serviço")
+            .WithDescription("Cancela a OS antes do fim da execução e dispara as compensações da Saga (CancelOperation, ReleaseStock, RefundPayment ou CancelBudget).");
 
         return app;
     }
@@ -92,6 +97,9 @@ public static class Endpoints
                 "StockConsumed" => SagaEventTypes.StockConsumed,
                 "PaymentConfirmed" => SagaEventTypes.PaymentConfirmed,
                 "PaymentFailed" => SagaEventTypes.PaymentFailed,
+                "DiagnosticFailed" => SagaEventTypes.DiagnosticFailed,
+                "BudgetGenerationFailed" => SagaEventTypes.BudgetGenerationFailed,
+                "OperationCanceled" => SagaEventTypes.OperationCanceled,
                 "OperationCompleted" or "ExecutionFinished" => SagaEventTypes.ExecutionFinished,
                 _ => null
             };
@@ -112,4 +120,5 @@ public static class Endpoints
 public sealed record CreateClientRequest(string Name, string Document, string Email, string? Phone);
 public sealed record CreateVehicleRequest(Guid ClientId, string Plate, string Model);
 public sealed record OpenServiceOrderRequest(Guid VehicleId, IReadOnlyList<string>? Services);
+public sealed record CancelServiceOrderRequest(string? Motivo);
 public sealed record DevEventRequest(string Tipo, Guid OrdemServicoId, Guid? BudgetId, Guid? PaymentId, string? Payload);
