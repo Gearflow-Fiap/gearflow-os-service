@@ -12,6 +12,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: gearflow-os
+        # Exigida pela NetworkPolicy do broker (junto com gearflow.io/messaging-access=true no namespace).
+        gearflow.io/rabbitmq-client: "true"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -26,6 +28,19 @@ spec:
                 name: gearflow-os-config
             - secretRef:
                 name: gearflow-os-secret
+          env:
+            # Credencial individual do OS no broker (usuario gearflow_os), copiada pelo operador
+            # do namespace messaging para o namespace da aplicacao. Prevalece sobre o envFrom.
+            - name: RabbitMq__Username
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-os-credentials
+                  key: username
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-os-credentials
+                  key: password
           resources:
             requests:
               cpu: 100m

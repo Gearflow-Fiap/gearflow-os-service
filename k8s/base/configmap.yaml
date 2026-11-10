@@ -6,7 +6,8 @@ data:
   ASPNETCORE_HTTP_PORTS: "8080"
   ASPNETCORE_ENVIRONMENT: Production
   DOTNET_EnableDiagnostics: "0"
-  RabbitMq__Host: rabbitmq
+  # Broker compartilhado do gearflow-infra-broker (namespace messaging). AMQP sem TLS, vhost gearflow.
+  RabbitMq__Host: rabbitmq.messaging.svc.cluster.local
   RabbitMq__Port: "5672"
   RabbitMq__VirtualHost: gearflow
   RabbitMq__Exchange: gearflow.events
