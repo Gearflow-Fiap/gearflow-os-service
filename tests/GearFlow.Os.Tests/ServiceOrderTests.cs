@@ -101,6 +101,70 @@ public class ServiceOrderTests
         oldPlate.Should().Be("ABC1234");
     }
 
+    [Fact]
+    public void Falha_da_saga_cancela_antes_da_execucao_terminar()
+    {
+        var order = Opened();
+        order.ApplyOrcamentoGerado(Now);
+
+        order.CancelBySagaFailure("o diagnóstico falhou", Now).IsSuccess.Should().BeTrue();
+        order.CancelBySagaFailure("de novo", Now).IsSuccess.Should().BeTrue();
+
+        order.Status.Should().Be(ServiceOrderStatus.Cancelled);
+        order.History.Count(item => item.Status == ServiceOrderStatus.Cancelled).Should().Be(1);
+    }
+
+    [Fact]
+    public void Falha_da_saga_nao_cancela_depois_da_execucao_ou_da_entrega()
+    {
+        var order = Opened();
+        order.ApplyOrcamentoGerado(Now);
+        order.ApplyOrcamentoApproved(Now, hasStockItems: false);
+        order.ApplyPaymentConfirmed(Guid.NewGuid(), Now);
+        order.ApplyOperationCompleted(Now);
+
+        order.CancelBySagaFailure("tarde demais", Now).Error.Code.Should().Be("Os.ExecutionFinished");
+        order.Deliver(Now).IsSuccess.Should().BeTrue();
+        order.CancelBySagaFailure("tarde demais", Now).Error.Code.Should().Be("Os.Completed");
+    }
+
+    [Fact]
+    public void Pagamento_recusado_cancela_a_os()
+    {
+        var order = Opened();
+        order.ApplyOrcamentoGerado(Now);
+        order.ApplyOrcamentoApproved(Now, hasStockItems: false);
+
+        order.ApplyPaymentFailed(Now).IsSuccess.Should().BeTrue();
+
+        order.Status.Should().Be(ServiceOrderStatus.Cancelled);
+    }
+
+    [Fact]
+    public void Total_aprovado_ignora_valor_invalido_e_normaliza_moeda()
+    {
+        var order = Opened();
+        order.CaptureApprovedAmount(0m, "BRL", Now);
+        order.ApprovedAmount.Should().BeNull();
+
+        order.CaptureApprovedAmount(99.9m, " brl ", Now);
+        order.ApprovedAmount.Should().Be(99.9m);
+        order.ApprovedCurrency.Should().Be("BRL");
+
+        order.CaptureApprovedAmount(10m, null, Now);
+        order.ApprovedCurrency.Should().Be("BRL");
+    }
+
+    [Fact]
+    public void Nota_longa_e_truncada_no_historico()
+    {
+        var order = Opened();
+        order.Note(new string('x', 400), Now);
+
+        order.History.Last().Message.Length.Should().Be(300);
+        order.Status.Should().Be(ServiceOrderStatus.Created);
+    }
+
     private static ServiceOrder Opened() =>
         ServiceOrder.Open(Guid.NewGuid(), Guid.NewGuid(), ["Revisão"], Now).Value;
 }

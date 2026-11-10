@@ -19,7 +19,6 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
             order.Services.Select(service => service.Description).ToList(),
             occurred);
 
-        outbox.Enqueue(EventRoutes.OrderCreated, payload);
         outbox.Enqueue(new OutgoingMessage
         {
             Exchange = SagaTopology.OsEventsExchange,
@@ -107,36 +106,40 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
                 jobs));
     }
 
-    public void OnPaymentFailed(ServiceOrder order)
-    {
-        if (!order.StockReserved)
-            return;
-        var messageId = Guid.NewGuid();
-        PublishMassTransit(
-            SagaTopology.ReleaseStockQueue,
-            "urn:message:GearFlow.Contracts:ReleaseStock",
-            new ReleaseStock(order.Id, messageId, clock.UtcNow, "payment-failed"));
-    }
+    public void OnPaymentFailed(ServiceOrder order) => Compensate(order, "payment-failed");
 
-    public void OnRejected(ServiceOrder order)
+    public void OnRejected(ServiceOrder order) => Compensate(order, "budget-rejected");
+
+    /// <summary>
+    /// Desfaz, em ordem inversa, o que a Saga já fez para a OS: cancela a operação, libera a reserva de estoque
+    /// e estorna o pagamento (ou cancela o orçamento quando ainda não houve pagamento).
+    /// </summary>
+    /// <param name="cancelOperation">false quando foi o próprio Operation que cancelou ou recusou a operação.</param>
+    public void Compensate(ServiceOrder order, string reason, bool cancelOperation = true)
     {
         var now = clock.UtcNow;
-        var cancelId = Guid.NewGuid();
-        PublishMassTransit(
-            SagaTopology.CancelOperationQueue,
-            "urn:message:GearFlow.Contracts.Operation.V1:CancelOperation",
-            new CancelOperation(order.Id, cancelId, ToUtcOffset(now), "budget-rejected"));
+        if (cancelOperation)
+        {
+            PublishMassTransit(
+                SagaTopology.CancelOperationQueue,
+                "urn:message:GearFlow.Contracts.Operation.V1:CancelOperation",
+                new CancelOperation(order.Id, Guid.NewGuid(), ToUtcOffset(now), reason));
+        }
 
-        if (order.StockReserved)
+        if (order.StockReserved && !order.StockConsumed)
         {
             PublishMassTransit(
                 SagaTopology.ReleaseStockQueue,
                 "urn:message:GearFlow.Contracts:ReleaseStock",
-                new ReleaseStock(order.Id, Guid.NewGuid(), now, "budget-rejected"));
+                new ReleaseStock(order.Id, Guid.NewGuid(), now, reason));
         }
 
-        if (order.BudgetId is { } budgetId)
-            PublishBilling(order, SagaTopology.CancelBudget, new { BudgetId = budgetId, Reason = "budget-rejected" });
+        if (order.BudgetId is not { } budgetId)
+            return;
+        if (order.PaymentId is { } paymentId)
+            PublishBilling(order, SagaTopology.RefundPayment, new { BudgetId = budgetId, PaymentId = paymentId, Reason = reason });
+        else
+            PublishBilling(order, SagaTopology.CancelBudget, new { BudgetId = budgetId, Reason = reason });
     }
 
     public void OnExecutionFinished(ServiceOrder order)
@@ -193,9 +196,12 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
     private void PublishRequestPayment(ServiceOrder order, Client client)
     {
         _ = client;
+        // O Billing exige o valor exato do orçamento. O total aprovado vem no BudgetApproved;
+        // o snapshot do diagnóstico fica só como reserva, porque pode divergir no arredondamento de insumos fracionados.
         var snapshot = ReadSnapshot(order);
-        var amount = snapshot is null ? 0m : snapshot.TotalPriceCents / 100m;
-        var currency = snapshot?.Currency is { Length: > 0 } value ? value : "BRL";
+        var amount = order.ApprovedAmount ?? (snapshot is null ? 0m : snapshot.TotalPriceCents / 100m);
+        var currency = order.ApprovedCurrency
+                       ?? (snapshot?.Currency is { Length: > 0 } value ? value : "BRL");
         PublishBilling(order, SagaTopology.RequestPayment, new
         {
             BudgetId = order.BudgetId ?? Guid.Empty,

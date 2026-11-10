@@ -10,7 +10,7 @@ A Fase 4 aceita orquestração ou coreografia. Este serviço adota **orquestraç
 
 - O OS publica comandos com destinatário único.
 - Os participantes respondem com fatos.
-- Compensações (`ReleaseStock`, `CancelBudget`, `CancelOperation`) saem daqui, não de um segundo orquestrador.
+- Compensações (`CancelOperation`, `ReleaseStock`, `RefundPayment` ou `CancelBudget`) saem daqui, não de um segundo orquestrador.
 
 Justificativa: Inventory já consome `ReserveStock`/`ReleaseStock`/`ConsumeStock`, Billing já consome `GenerateBudget`/`RequestPayment`/`CancelBudget`/`RefundPayment`, e Operation já consome `StartDiagnostic`/`StartExecution`/`CancelOperation`. Sem um orquestrador, esses contratos ficam órfãos.
 
@@ -24,23 +24,40 @@ Created → WaitingOrcamento → AwaitingStock → AwaitingPayment → InProgres
 
 Sem peças, a aprovação pula `AwaitingStock` e vai para `AwaitingPayment`. `Paid` fica no histórico na confirmação do pagamento. A entrega exige execução concluída e, se houve reserva, baixa de estoque (`StockConsumed`).
 
+## Falhas e compensações
+
+Qualquer falha antes do fim da execução cancela a OS (`Cancelled`) e desfaz, uma única vez, o que a Saga já fez:
+
+| Falha recebida | Compensação enviada pelo OS |
+|---|---|
+| `DiagnosticFailed`, `BudgetGenerationFailed`, `BudgetRejected` | `CancelOperation`; `CancelBudget` se já existe orçamento |
+| `PaymentFailed` | `CancelOperation`, `ReleaseStock` (se reservou) e `CancelBudget` |
+| `OperationCommandRejected` (ex.: `StartExecution` recusado) | `CancelOperation`, `ReleaseStock` e `RefundPayment` (se já pagou) ou `CancelBudget` |
+| `OperationCanceled` iniciado pelo Operation | `ReleaseStock` e `RefundPayment` ou `CancelBudget` (sem reenviar `CancelOperation`) |
+| Cancelamento pela recepção (`POST /api/ordens-servico/{id}/cancelamento`) | as mesmas da linha anterior, mais `CancelOperation` |
+
+Depois que o Operation conclui a execução, a OS não é mais cancelada: a falha fica registrada no histórico. Recusa de cancelamento (`OperationCancellationRejected` ou `OperationCommandRejected` de `CancelOperation`) e confirmações (`StockReleased`, `PaymentRefunded`, `BudgetCanceled`, `PaymentRequested`, `OperationCanceled` após o cancelamento) também vão para o histórico.
+
+O `RequestPayment` usa o total do `BudgetApproved` (`totalAmount`), que é o valor que o Billing confere. O total do diagnóstico fica só como reserva.
+
+A OS que espera peças (`AwaitingParts`) não tem prazo automático: a recepção cancela pela rota acima.
+
 ## Contratos de mensageria
 
 O OS fala os três idiomas que já existem — não inventa um quarto:
 
 | Destino | Como publica | Nome |
 |---|---|---|
-| Broker / legado | topic `gearflow.events` | `os.created` e `os.order-created.v1` |
-| Billing | topic `gearflow.commands.v1` + envelope v1 (`Producer=gearflow-os-service`) | `billing.GenerateBudget`, `billing.RequestPayment`, `billing.CancelBudget` |
+| Broker (informativo) | topic `gearflow.events` | `os.order-created.v1` |
+| Billing | topic `gearflow.commands.v1` + envelope v1 (`Producer=gearflow-os-service`) | `billing.GenerateBudget`, `billing.RequestPayment`, `billing.CancelBudget`, `billing.RefundPayment` |
 | Operation | fila MassTransit | `operation-start-diagnostic`, `operation-start-execution`, `operation-cancel-operation` |
 | Inventory | fila MassTransit | `inventory-reserve-stock`, `inventory-release-stock`, `inventory-consume-stock` |
 
 Consome:
 
 - `gearflow.events.v1` / `gearflow-budget-service.*`
-- fanouts `operation.diagnostic-finished`, `operation.execution-finished`, …
-- fanouts `inventory.stock-reserved`, `inventory.stock-insufficient`, `inventory.stock-consumed`, `inventory.stock-replenished`
-- rotas legadas `budget.generated`, `budget.approved`, `operation.completed` (ainda aceitas)
+- fanouts `operation.diagnostic-finished`, `operation.diagnostic-failed`, `operation.execution-finished`, `operation.canceled`, `operation.command-rejected`, `operation.cancellation-rejected`
+- fanouts `inventory.stock-reserved`, `inventory.stock-insufficient`, `inventory.stock-released`, `inventory.stock-consumed`, `inventory.stock-replenished`
 
 Com o broker do `gearflow-infra-broker`, use `RabbitMq__VirtualHost=gearflow`.
 
@@ -103,7 +120,7 @@ POST /api/dev/eventos
 POST /api/ordens-servico/<id>/entrega
 ```
 
-`tipo` também aceita os nomes antigos (`OrcamentoGerado`, `OrcamentoApproved`, `OperationCompleted`) e os de estoque (`StockReserved`, `StockInsufficient`, `StockConsumed`).
+`tipo` também aceita os nomes antigos (`OrcamentoGerado`, `OrcamentoApproved`, `OperationCompleted`), os de estoque (`StockReserved`, `StockInsufficient`, `StockConsumed`) e as falhas (`PaymentFailed`, `DiagnosticFailed`, `BudgetGenerationFailed`, `OperationCanceled`), para demonstrar as compensações.
 
 ## Testes
 
@@ -111,14 +128,19 @@ POST /api/ordens-servico/<id>/entrega
 dotnet test
 ```
 
-Há testes de unidade da máquina de estados, da orquestração e um cenário BDD (Reqnroll) do ciclo abrir → orçamento → pagamento → execução → entrega. O CI no GitHub Actions aplica gate de cobertura de 80% em Domain + Application.
+Há testes de unidade da máquina de estados, da orquestração e dos caminhos de falha (compensações), além de dois cenários BDD (Reqnroll): o ciclo completo abrir → orçamento → pagamento → execução → entrega e o pagamento recusado com compensação.
+
+O CI no GitHub Actions aplica gate de cobertura de 80% de linhas em Domain + Application. Primeira execução no GitHub (10/11/2026, job "Build + testes + cobertura"): gate aprovado; o relatório Cobertura fica no artefato `coverage` de cada execução em [Actions](https://github.com/Gearflow-Fiap/gearflow-os-service/actions/workflows/ci.yml). Medição local de 05/11/2026: 82,2% de linhas.
 
 ## Observabilidade e entrega
 
-- Traces/métricas OpenTelemetry (OTLP quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido)
+- Traces/métricas OpenTelemetry por OTLP; no Kubernetes vão para o New Relic (veja [`k8s/README.md`](k8s/README.md))
 - Probes `/health/live` e `/health/ready` (Postgres + RabbitMQ)
 - Manifests em [`k8s/base`](k8s/base)
-- Pipeline em [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+- [`ci.yml`](.github/workflows/ci.yml): build, testes, gate de cobertura e SonarCloud (liga com `SONAR_PROJECT_KEY`, `SONAR_ORG` e o secret `SONAR_TOKEN`)
+- [`docker-publish.yml`](.github/workflows/docker-publish.yml): imagem no GHCR (`ghcr.io/gearflow-fiap/gearflow-os-service`)
+- [`delivery.yml`](.github/workflows/delivery.yml): deploy no EKS depois do CI verde na `main` (liga com `DEPLOY_ENABLED=true`)
+- A `main` é protegida: merge só por PR, com aprovação e o CI verde
 
 ## Stack
 

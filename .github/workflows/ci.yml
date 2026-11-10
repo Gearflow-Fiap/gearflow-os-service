@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, dev ]
   workflow_dispatch:
 
 permissions:
@@ -59,3 +59,45 @@ jobs:
           name: coverage
           path: ./coverage/**/coverage.cobertura.xml
           if-no-files-found: ignore
+
+  sonar:
+    name: SonarCloud (quality gate)
+    # Fica desligado até o projeto existir no SonarCloud: variável SONAR_PROJECT_KEY (+ SONAR_ORG) e secret SONAR_TOKEN.
+    # Em PR de fork os secrets não existem, então não roda.
+    if: >-
+      vars.SONAR_PROJECT_KEY != '' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # o Sonar usa o histórico para separar código novo do antigo
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Instala o scanner
+        run: dotnet tool install --global dotnet-sonarscanner --version 12.0.0
+
+      - name: Analisa, mede cobertura e exige o quality gate
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORG: ${{ vars.SONAR_ORG }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_ORG" ]; then
+            echo "::error::Defina o secret SONAR_TOKEN e a variável SONAR_ORG."; exit 1
+          fi
+          # O scanner lê OpenCover; o coverlet.runsettings gera Cobertura para o gate. Troca só neste job (não é commitado).
+          sed -i 's#<Format>cobertura</Format>#<Format>opencover</Format>#' coverlet.runsettings
+          dotnet sonarscanner begin /k:"$SONAR_PROJECT_KEY" /o:"$SONAR_ORG" \
+            /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url=https://sonarcloud.io \
+            /d:sonar.cs.opencover.reportsPaths="coverage/sonar/**/coverage.opencover.xml" \
+            /d:sonar.coverage.exclusions="**/Program.cs,src/GearFlow.Os.Api/**,src/GearFlow.Os.Infrastructure/**" \
+            /d:sonar.qualitygate.wait=true
+          dotnet build GearFlow.Os.slnx -c Release
+          dotnet test tests/GearFlow.Os.Tests -c Release --no-build \
+            --settings coverlet.runsettings --collect:"XPlat Code Coverage" --results-directory ./coverage/sonar
+          dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"

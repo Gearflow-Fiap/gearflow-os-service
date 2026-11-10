@@ -66,20 +66,26 @@ public sealed class AtualizarStatusOsHandler(
                 var snapshot = ReadSnapshot(message.RawBody) ?? new DiagnosticSnapshot(Guid.Empty, "BRL", "unknown", DateTimeOffset.UtcNow, 0, []);
                 saga.OnDiagnosticFinished(order, client, snapshot);
                 return Result.Success();
+            case SagaEventTypes.DiagnosticFailed:
+                return FailAndCompensate(order, "o diagnóstico falhou", "diagnostic-failed", cancelOperation: true, now);
             case SagaEventTypes.BudgetGenerated:
                 saga.OnBudgetGenerated(order, message.BudgetId);
                 return order.ApplyOrcamentoGerado(now);
+            case SagaEventTypes.BudgetGenerationFailed:
+                return FailAndCompensate(order, "o Billing não conseguiu gerar o orçamento", "budget-generation-failed", cancelOperation: true, now);
             case SagaEventTypes.BudgetApproved:
                 if (message.BudgetId is { } approvedBudget)
                     order.CaptureBudget(approvedBudget, now);
+                order.CaptureApprovedAmount(message.Amount, message.Currency, now);
+                var wasWaitingApproval = order.Status == ServiceOrderStatus.WaitingOrcamento;
                 var applied = order.ApplyOrcamentoApproved(now, SagaOrchestrator.StockLines(order).Count > 0);
-                if (applied.IsSuccess && client is not null)
+                if (applied.IsSuccess && wasWaitingApproval && client is not null)
                     saga.OnBudgetApproved(order, client);
                 return applied;
             case SagaEventTypes.BudgetRejected:
-            case SagaEventTypes.DiagnosticFailed:
+                var wasCancelled = order.Status == ServiceOrderStatus.Cancelled;
                 var rejected = order.ApplyOrcamentoRejected(now);
-                if (rejected.IsSuccess)
+                if (rejected.IsSuccess && !wasCancelled)
                     saga.OnRejected(order);
                 return rejected;
             case SagaEventTypes.StockReserved:
@@ -95,8 +101,9 @@ public sealed class AtualizarStatusOsHandler(
                     saga.OnPaymentConfirmed(order);
                 return paid;
             case SagaEventTypes.PaymentFailed:
+                var wasAwaitingPayment = order.Status == ServiceOrderStatus.AwaitingPayment;
                 var failed = order.ApplyPaymentFailed(now);
-                if (failed.IsSuccess)
+                if (failed.IsSuccess && wasAwaitingPayment)
                     saga.OnPaymentFailed(order);
                 return failed;
             case SagaEventTypes.ExecutionFinished:
@@ -106,9 +113,62 @@ public sealed class AtualizarStatusOsHandler(
                 return finished;
             case SagaEventTypes.StockConsumed:
                 return order.ApplyStockConsumed(now);
+            case SagaEventTypes.OperationCommandRejected:
+                if (string.Equals(message.CommandName, "CancelOperation", StringComparison.Ordinal))
+                {
+                    order.Note($"O Operation recusou o cancelamento ({message.Code ?? "sem código"}). Verificar a operação manualmente.", now);
+                    return Result.Success();
+                }
+                return FailAndCompensate(
+                    order,
+                    $"o Operation recusou o comando {message.CommandName ?? "desconhecido"} ({message.Code ?? "sem código"})",
+                    "operation-command-rejected",
+                    cancelOperation: true,
+                    now);
+            case SagaEventTypes.OperationCancellationRejected:
+                order.Note($"O Operation recusou o cancelamento ({message.Code ?? "sem código"}). Verificar a operação manualmente.", now);
+                return Result.Success();
+            case SagaEventTypes.OperationCanceled:
+                if (order.Status == ServiceOrderStatus.Cancelled)
+                {
+                    order.Note("Cancelamento confirmado pelo Operation.", now);
+                    return Result.Success();
+                }
+                return FailAndCompensate(order, "a operação foi cancelada no Operation", "operation-canceled", cancelOperation: false, now);
+            case SagaEventTypes.StockReleased:
+                order.Note("Reserva de estoque liberada pelo Inventory.", now);
+                return Result.Success();
+            case SagaEventTypes.PaymentRefunded:
+                order.Note("Pagamento estornado pelo Billing.", now);
+                return Result.Success();
+            case SagaEventTypes.BudgetCanceled:
+                order.Note("Orçamento cancelado no Billing.", now);
+                return Result.Success();
+            case SagaEventTypes.PaymentRequested:
+                order.Note("Cobrança gerada. Aguardando o pagamento do cliente.", now);
+                return Result.Success();
             default:
                 return Result.Success();
         }
+    }
+
+    /// <summary>
+    /// Falha em qualquer etapa: cancela a OS e dispara as compensações uma única vez.
+    /// Se a OS não pode mais ser cancelada (execução concluída), registra a falha no histórico.
+    /// </summary>
+    private Result FailAndCompensate(ServiceOrder order, string reason, string code, bool cancelOperation, DateTime now)
+    {
+        var alreadyCancelled = order.Status == ServiceOrderStatus.Cancelled;
+        var cancelled = order.CancelBySagaFailure(reason, now);
+        if (cancelled.IsFailure)
+        {
+            order.Note($"Falha recebida sem cancelamento: {reason}. {cancelled.Error.Description}", now);
+            return Result.Success();
+        }
+
+        if (!alreadyCancelled)
+            saga.Compensate(order, code, cancelOperation);
+        return Result.Success();
     }
 
     private async Task<Result> RetryAwaitingParts(IncomingSagaMessage message, CancellationToken cancellationToken)

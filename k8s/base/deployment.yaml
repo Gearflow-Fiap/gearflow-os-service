@@ -12,6 +12,8 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: gearflow-os
+        # Exigida pela NetworkPolicy do broker (junto com gearflow.io/messaging-access=true no namespace).
+        gearflow.io/rabbitmq-client: "true"
     spec:
       automountServiceAccountToken: false
       containers:
@@ -26,6 +28,29 @@ spec:
                 name: gearflow-os-config
             - secretRef:
                 name: gearflow-os-secret
+          env:
+            # Credencial individual do OS no broker (usuario gearflow_os), copiada pelo operador
+            # do namespace messaging para o namespace da aplicacao. Prevalece sobre o envFrom.
+            - name: RabbitMq__Username
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-os-credentials
+                  key: username
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-os-credentials
+                  key: password
+            # Licença do New Relic, do Secret que o gearflow-infra-k8s cria no namespace. Opcional: sem ela só não exporta.
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newrelic-apm-secret
+                  key: NEW_RELIC_LICENSE_KEY
+                  optional: true
+            # O $(...) é expandido pelo Kubernetes e exige que NEW_RELIC_LICENSE_KEY venha antes nesta lista.
+            - name: OTEL_EXPORTER_OTLP_HEADERS
+              value: "api-key=$(NEW_RELIC_LICENSE_KEY)"
           resources:
             requests:
               cpu: 100m

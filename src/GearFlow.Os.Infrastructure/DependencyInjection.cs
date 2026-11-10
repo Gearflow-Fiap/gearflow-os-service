@@ -5,6 +5,7 @@ using GearFlow.Os.Application.UseCases.AbrirOrdemServico;
 using GearFlow.Os.Application.UseCases.AtualizarStatusOs;
 using GearFlow.Os.Application.UseCases.CadastrarCliente;
 using GearFlow.Os.Application.UseCases.CadastrarVeiculo;
+using GearFlow.Os.Application.UseCases.CancelarOrdemServico;
 using GearFlow.Os.Application.UseCases.ConsultarCadastro;
 using GearFlow.Os.Application.UseCases.ConsultarOrdemServico;
 using GearFlow.Os.Application.UseCases.FinalizarOrdemServico;
@@ -41,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<AbrirOrdemServicoHandler>();
         services.AddScoped<AtualizarStatusOsHandler>();
         services.AddScoped<FinalizarOrdemServicoHandler>();
+        services.AddScoped<CancelarOrdemServicoHandler>();
         services.AddScoped<ConsultarOrdemServicoHandler>();
         services.AddScoped<ConsultarCadastroHandler>();
 

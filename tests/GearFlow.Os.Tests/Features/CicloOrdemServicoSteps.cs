@@ -53,6 +53,32 @@ public class CicloOrdemServicoSteps
             new IncomingSagaMessage(SagaEventTypes.PaymentConfirmed, Guid.NewGuid(), _orderId, null, Guid.NewGuid(), null, null, "{}"),
             CancellationToken.None)).IsSuccess.Should().BeTrue();
 
+    [When(@"o diagnóstico encontra a peça ""(.*)""")]
+    public async Task QuandoDiagnostico(string peca)
+    {
+        var snapshot = new DiagnosticSnapshot(Guid.NewGuid(), "BRL", "v1", DateTimeOffset.UtcNow, 20000,
+        [
+            new CommercialLine(Guid.NewGuid(), "Labor", Guid.NewGuid(), "Mão de obra", 1, 8000, 8000),
+            new CommercialLine(Guid.NewGuid(), "Part", Guid.NewGuid(), peca, 1, 12000, 12000)
+        ]);
+        var json = "{\"message\":{\"snapshot\":" + System.Text.Json.JsonSerializer.Serialize(snapshot, OsJson.Options) + "}}";
+        (await Status().Handle(
+            new IncomingSagaMessage(SagaEventTypes.DiagnosticFinished, Guid.NewGuid(), _orderId, null, null, null, null, json),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+    }
+
+    [When("chega o evento StockReserved")]
+    public async Task QuandoEstoqueReservado() =>
+        (await Status().Handle(
+            new IncomingSagaMessage(SagaEventTypes.StockReserved, Guid.NewGuid(), _orderId, null, null, null, null, "{}"),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
+    [When("chega o evento PaymentFailed")]
+    public async Task QuandoPagamentoRecusado() =>
+        (await Status().Handle(
+            new IncomingSagaMessage(SagaEventTypes.PaymentFailed, Guid.NewGuid(), _orderId, null, null, null, null, "{}"),
+            CancellationToken.None)).IsSuccess.Should().BeTrue();
+
     [When("chega o evento ExecutionFinished")]
     public async Task QuandoOperacao() =>
         (await Status().QuandoOperacaoConcluida(Guid.NewGuid(), _orderId, CancellationToken.None)).IsSuccess.Should().BeTrue();
@@ -80,6 +106,19 @@ public class CicloOrdemServicoSteps
     {
         var order = await new ConsultarOrdemServicoHandler(_db).PorId(_orderId, CancellationToken.None);
         order.Value.History.Should().Contain(item => item.Status == status);
+    }
+
+    [Then(@"a Saga enviou ""(.*)"" para o (Inventory|Operation)")]
+    public void EntaoComandoEnviado(string comando, string servico)
+    {
+        var fila = (comando, servico) switch
+        {
+            ("ReleaseStock", "Inventory") => SagaTopology.ReleaseStockQueue,
+            ("ReserveStock", "Inventory") => SagaTopology.ReserveStockQueue,
+            ("CancelOperation", "Operation") => SagaTopology.CancelOperationQueue,
+            _ => throw new ArgumentException($"Comando {comando} não mapeado para {servico}.")
+        };
+        _db.Published.Should().Contain(item => item.RoutingKey == fila);
     }
 
     private AtualizarStatusOsHandler Status() =>

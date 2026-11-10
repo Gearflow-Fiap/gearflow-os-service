@@ -29,11 +29,11 @@ public class AbrirConsultarEAtualizarTests
         opened.IsSuccess.Should().BeTrue();
         opened.Value.Code.Should().Be(1);
         opened.Value.Status.Should().Be("Created");
-        db.Published.Should().Contain(item => item.RoutingKey == EventRoutes.OrderCreated);
         db.Published.Should().Contain(item => item.RoutingKey == EventRoutes.OrderCreatedV1);
+        db.Published.Should().NotContain(item => item.RoutingKey == "os.created");
         db.Published.Should().Contain(item => item.RoutingKey == SagaTopology.StartDiagnosticQueue);
         var payload = JsonSerializer.Deserialize<OrderCreatedPayload>(
-            db.Published.First(item => item.RoutingKey == EventRoutes.OrderCreated).Payload, OsJson.Options);
+            db.Published.First(item => item.RoutingKey == EventRoutes.OrderCreatedV1).Payload, OsJson.Options);
         payload!.ServiceOrderId.Should().Be(opened.Value.Id);
 
         var consulted = await new ConsultarOrdemServicoHandler(db).PorId(opened.Value.Id, CancellationToken.None);
