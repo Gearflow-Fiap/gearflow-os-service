@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: gearflow
       POSTGRES_DB: gearflow_os
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - os-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -18,23 +18,39 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    networks:
+      - default
+      - integration
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 12
 
+  schema-upgrade:
+    image: postgres:16
+    environment:
+      PGPASSWORD: gearflow
+    volumes:
+      - ./scripts/sql/20261111_requested_service_catalog.sql:/schema/upgrade.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "gearflow", "-d", "gearflow_os", "-v", "ON_ERROR_STOP=1", "-f", "/schema/upgrade.sql"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   os-service:
     build: .
     ports:
-      - "5080:8080"
+      - "127.0.0.1:5080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__OsDb: Host=postgres;Port=5432;Database=gearflow_os;Username=gearflow;Password=gearflow
       RabbitMq__Host: rabbitmq
       RabbitMq__Port: 5672
+      RabbitMq__VirtualHost: /
       RabbitMq__Username: guest
       RabbitMq__Password: guest
       Jwt__Secret: dev-only-super-secret-change-me-32chars-minimum
@@ -45,6 +61,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      schema-upgrade:
+        condition: service_completed_successfully
+
+networks:
+  integration:
+    name: gearflow-local-integration
 
 volumes:
   os-postgres:
