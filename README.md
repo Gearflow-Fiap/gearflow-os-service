@@ -67,7 +67,26 @@ Com o broker do `gearflow-infra-broker`, use `RabbitMq__VirtualHost=gearflow`.
 docker compose up --build
 ```
 
-Se o Postgres local já existia **antes desta versão**, recrie o volume (`docker compose down -v`) — o schema ganhou colunas da Saga.
+O Compose aplica automaticamente a atualização aditiva CatalogJobId antes de iniciar
+a API; em banco vazio, a aplicação cria o schema. Não é necessário apagar volumes
+para essa atualização. Essa etapa cobre CatalogJobId, não migra versões arbitrárias
+anteriores do schema.
+
+JWT, RabbitMQ e conexão PostgreSQL já possuem configuração local padrão. Não é
+necessário definir variáveis no terminal. Pare antes as APIs iniciadas com
+`dotnet run` para liberar as portas 5080/5085. Para iniciar em segundo plano:
+
+```powershell
+cd C:\WS\gearflow-os-service
+docker compose up -d --build
+cd C:\WS\gearflow-operation-service
+docker compose up -d --build
+```
+
+A OS mantém o único RabbitMQ e cria a rede `gearflow-local-integration`, usada pelo
+Operation. Suba nesta ordem. Bancos continuam separados e os volumes são mantidos.
+Configurações e credenciais são exclusivas de desenvolvimento, com portas no loopback.
+Os perfis Kubernetes não são alterados por este Compose.
 
 - API: http://localhost:5080
 - Scalar: http://localhost:5080/scalar
@@ -103,7 +122,7 @@ POST /api/veiculos
 { "clientId": "<id>", "plate": "ABC1D23", "model": "Gol" }
 
 POST /api/ordens-servico
-{ "vehicleId": "<id>", "services": ["Troca de óleo"] }
+{ "vehicleId": "<id>", "services": [{ "catalogJobId": "<id-real-do-catalogo-operation>", "description": "Troca de óleo" }] }
 
 POST /api/dev/eventos
 { "tipo": "BudgetGenerated", "ordemServicoId": "<id>" }
