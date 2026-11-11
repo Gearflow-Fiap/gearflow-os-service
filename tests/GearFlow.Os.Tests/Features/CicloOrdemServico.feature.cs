@@ -194,6 +194,64 @@ namespace GearFlow.Os.Tests.Features
             await this.ScenarioCleanupAsync();
         }
         
+        [Xunit.SkippableFactAttribute(DisplayName="Pagamento recusado cancela a OS e compensa as etapas anteriores")]
+        [Xunit.TraitAttribute("FeatureTitle", "Ciclo orquestrado da ordem de serviço")]
+        [Xunit.TraitAttribute("Description", "Pagamento recusado cancela a OS e compensa as etapas anteriores")]
+        public async global::System.Threading.Tasks.Task PagamentoRecusadoCancelaAOSECompensaAsEtapasAnteriores()
+        {
+            string[] tagsOfScenario = ((string[])(null));
+            global::System.Collections.Specialized.OrderedDictionary argumentsOfScenario = new global::System.Collections.Specialized.OrderedDictionary();
+            global::Reqnroll.ScenarioInfo scenarioInfo = new global::Reqnroll.ScenarioInfo("Pagamento recusado cancela a OS e compensa as etapas anteriores", null, tagsOfScenario, argumentsOfScenario, featureTags);
+#line 21
+  this.ScenarioInitialize(scenarioInfo);
+#line hidden
+            if ((global::Reqnroll.TagHelper.ContainsIgnoreTag(scenarioInfo.CombinedTags) || global::Reqnroll.TagHelper.ContainsIgnoreTag(featureTags)))
+            {
+                testRunner.SkipScenario();
+            }
+            else
+            {
+                await this.ScenarioStartAsync();
+#line 22
+    await testRunner.GivenAsync("um cliente com um veículo cadastrado", ((string)(null)), ((global::Reqnroll.Table)(null)), "Dado ");
+#line hidden
+#line 23
+    await testRunner.WhenAsync("a recepcionista abre uma OS com o serviço \"Troca de pastilhas\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+#line hidden
+#line 24
+    await testRunner.AndAsync("o diagnóstico encontra a peça \"Pastilha de freio\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+#line 25
+    await testRunner.AndAsync("chega o evento BudgetGenerated", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+#line 26
+    await testRunner.AndAsync("chega o evento BudgetApproved", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+#line 27
+    await testRunner.ThenAsync("o status da OS é \"AwaitingStock\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+#line hidden
+#line 28
+    await testRunner.WhenAsync("chega o evento StockReserved", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+#line hidden
+#line 29
+    await testRunner.ThenAsync("o status da OS é \"AwaitingPayment\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+#line hidden
+#line 30
+    await testRunner.WhenAsync("chega o evento PaymentFailed", ((string)(null)), ((global::Reqnroll.Table)(null)), "Quando ");
+#line hidden
+#line 31
+    await testRunner.ThenAsync("o status da OS é \"Cancelled\"", ((string)(null)), ((global::Reqnroll.Table)(null)), "Então ");
+#line hidden
+#line 32
+    await testRunner.AndAsync("a Saga enviou \"ReleaseStock\" para o Inventory", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+#line 33
+    await testRunner.AndAsync("a Saga enviou \"CancelOperation\" para o Operation", ((string)(null)), ((global::Reqnroll.Table)(null)), "E ");
+#line hidden
+            }
+            await this.ScenarioCleanupAsync();
+        }
+        
         [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Reqnroll", "2.0.0.0")]
         [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
         public class FixtureData : object, Xunit.IAsyncLifetime

@@ -143,7 +143,7 @@ public class SagaOrchestratorTests
         var vehicle = await new CadastrarVeiculoHandler(db, db, db, clock)
             .Handle(new CadastrarVeiculoCommand(client.Value.Id, "ABC1D23", "Gol"), CancellationToken.None);
         var opened = await new AbrirOrdemServicoHandler(db, db, new SagaOrchestrator(db, clock), db, clock)
-            .Handle(new AbrirOrdemServicoCommand(vehicle.Value.Id, ["Troca de óleo"]), CancellationToken.None);
+            .Handle(new AbrirOrdemServicoCommand(vehicle.Value.Id, [new(Guid.NewGuid(), "Troca de óleo")]), CancellationToken.None);
         return (db, opened.Value.Id, client.Value.Id);
     }
 }

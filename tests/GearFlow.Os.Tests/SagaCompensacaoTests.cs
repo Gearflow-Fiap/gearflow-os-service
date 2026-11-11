@@ -212,7 +212,7 @@ public class SagaCompensacaoTests
             var vehicle = await new CadastrarVeiculoHandler(db, db, db, clock)
                 .Handle(new CadastrarVeiculoCommand(client.Value.Id, "ABC1D23", "Gol"), CancellationToken.None);
             var opened = await new AbrirOrdemServicoHandler(db, db, new SagaOrchestrator(db, clock), db, clock)
-                .Handle(new AbrirOrdemServicoCommand(vehicle.Value.Id, ["Troca de pastilhas"]), CancellationToken.None);
+                .Handle(new AbrirOrdemServicoCommand(vehicle.Value.Id, [new(Guid.NewGuid(), "Troca de pastilhas")]), CancellationToken.None);
             return new Scenario(db, clock, opened.Value.Id);
         }
 
