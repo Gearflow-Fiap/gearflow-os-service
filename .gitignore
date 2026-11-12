@@ -9,3 +9,5 @@ TestResults/
 coverage/
 *.DotSettings.user
 appsettings.*.local.json
+
+/k8s/academy-release/
