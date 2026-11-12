@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text;
+using GearFlow.Os.Application.Messaging;
 using GearFlow.Os.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,24 +60,32 @@ public sealed class OutboxDispatcher(
 
         foreach (var message in pending)
         {
-            var properties = new BasicProperties
-            {
-                ContentType = string.IsNullOrWhiteSpace(message.ContentType) ? "application/json" : message.ContentType,
-                DeliveryMode = DeliveryModes.Persistent,
-                MessageId = message.MessageId == Guid.Empty ? null : message.MessageId.ToString("D"),
-                CorrelationId = message.CorrelationId == Guid.Empty ? null : message.CorrelationId.ToString("D")
-            };
+            // O span é filho do contexto gravado ao enfileirar (a requisição ou a mensagem que gerou isto), não de nada deste serviço em segundo plano.
+            using var activity = OsTelemetry.StartPublish(
+                OsTelemetry.ParseParent(message.TraceParent, message.TraceState),
+                OutboxPublishing.Destination(message, settings.Exchange),
+                message.MessageId,
+                message.CorrelationId);
+            var properties = OutboxPublishing.CreateProperties(message, activity);
 
-            if (!string.IsNullOrWhiteSpace(message.Queue))
+            try
             {
-                await channel.QueueDeclareAsync(message.Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: cancellationToken);
-                await channel.BasicPublishAsync("", message.Queue, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+                if (!string.IsNullOrWhiteSpace(message.Queue))
+                {
+                    await channel.QueueDeclareAsync(message.Queue, durable: true, exclusive: false, autoDelete: false, cancellationToken: cancellationToken);
+                    await channel.BasicPublishAsync("", message.Queue, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+                }
+                else
+                {
+                    var exchange = string.IsNullOrWhiteSpace(message.Exchange) ? settings.Exchange : message.Exchange;
+                    await channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
+                    await channel.BasicPublishAsync(exchange, message.RoutingKey, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+                }
             }
-            else
+            catch (Exception exception)
             {
-                var exchange = string.IsNullOrWhiteSpace(message.Exchange) ? settings.Exchange : message.Exchange;
-                await channel.ExchangeDeclareAsync(exchange, ExchangeType.Topic, durable: true, cancellationToken: cancellationToken);
-                await channel.BasicPublishAsync(exchange, message.RoutingKey, false, properties, Encoding.UTF8.GetBytes(message.Payload), cancellationToken);
+                activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+                throw;
             }
 
             message.ProcessedOn = DateTime.UtcNow;

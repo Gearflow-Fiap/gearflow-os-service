@@ -22,6 +22,8 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<OsDbContext>();
     await db.Database.EnsureCreatedAsync();
+    // EnsureCreated não altera um banco que já existe: completa as colunas de trace do outbox se faltarem (idempotente).
+    await db.Database.EnsureTraceColumnsAsync();
 }
 
 app.UseAuthentication();

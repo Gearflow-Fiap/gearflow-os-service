@@ -12,6 +12,10 @@ public sealed class OutboxMessage
     public Guid CorrelationId { get; set; }
     public DateTime CreatedOn { get; set; }
     public DateTime? ProcessedOn { get; set; }
+
+    /// <summary>Contexto de trace (W3C) de quem enfileirou a mensagem; o dispatcher o envia como header para o trace continuar nos vizinhos.</summary>
+    public string? TraceParent { get; set; }
+    public string? TraceState { get; set; }
 }
 
 public sealed class InboxMessage

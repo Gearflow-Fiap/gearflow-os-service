@@ -154,6 +154,8 @@ O CI no GitHub Actions aplica gate de cobertura de 80% de linhas em Domain + App
 ## Observabilidade e entrega
 
 - Traces/métricas OpenTelemetry por OTLP; no Kubernetes vão para o New Relic (veja [`k8s/README.md`](k8s/README.md))
+- **O trace atravessa o RabbitMQ**: uma OS aparece como um trace só, do POST no OS até a resposta de Inventory, Billing e Operation. O contexto W3C é gravado na linha do outbox ao enfileirar (colunas `TraceParent` e `TraceState`), enviado como header `traceparent` (lido pelo Billing) e `Diagnostic-Id` (lido pelo MassTransit do Inventory e do Operation) e retomado no consumidor (`os.consume`). Código em [`OsTelemetry.cs`](src/GearFlow.Os.Application/Messaging/OsTelemetry.cs); a `ActivitySource` é `GearFlow.Os`.
+- **Banco já existente:** o OS cria o schema com `EnsureCreatedAsync`, que não altera tabelas existentes. Por isso o startup roda um `ALTER TABLE … ADD COLUMN IF NOT EXISTS` idempotente para as colunas de trace do outbox ([`OutboxSchema.cs`](src/GearFlow.Os.Infrastructure/Persistence/OutboxSchema.cs)); em banco novo ele não faz nada.
 - Probes `/health/live` e `/health/ready` (Postgres + RabbitMQ)
 - Manifests em [`k8s/base`](k8s/base)
 - [`ci.yml`](.github/workflows/ci.yml): build, testes, gate de cobertura e SonarCloud (liga com `SONAR_PROJECT_KEY`, `SONAR_ORG` e o secret `SONAR_TOKEN`)
