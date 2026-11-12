@@ -34,7 +34,7 @@ public class CicloOrdemServicoSteps
     public async Task QuandoAbre(string servico)
     {
         var opened = await new AbrirOrdemServicoHandler(_db, _db, new SagaOrchestrator(_db, _clock), _db, _clock)
-            .Handle(new AbrirOrdemServicoCommand(_vehicleId, [servico]), CancellationToken.None);
+            .Handle(new AbrirOrdemServicoCommand(_vehicleId, [new(Guid.NewGuid(), servico)]), CancellationToken.None);
         opened.IsSuccess.Should().BeTrue();
         _orderId = opened.Value.Id;
     }

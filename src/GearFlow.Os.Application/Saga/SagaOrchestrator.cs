@@ -10,6 +10,10 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
 {
     public void OnOpened(ServiceOrder order, Vehicle vehicle)
     {
+        if (order.Services.Count == 0 || order.Services.Count > 200 ||
+            order.Services.Any(service => service.CatalogJobId is null || service.CatalogJobId == Guid.Empty))
+            throw new InvalidOperationException("Associe os serviços ao catálogo antes de iniciar o diagnóstico.");
+
         var occurred = clock.UtcNow;
         var payload = new OrderCreatedPayload(
             Guid.NewGuid(),
@@ -38,7 +42,7 @@ public sealed class SagaOrchestrator(IOutbox outbox, IClock clock)
                 ToUtcOffset(occurred),
                 vehicle.Id,
                 order.Code == 0 ? null : order.Code,
-                [],
+                order.Services.Select(service => new RequestedJob(service.Id, service.CatalogJobId!.Value)).ToArray(),
                 []));
     }
 

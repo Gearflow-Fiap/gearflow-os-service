@@ -6,7 +6,8 @@ using GearFlow.Os.Domain.Primitives;
 
 namespace GearFlow.Os.Application.UseCases.AbrirOrdemServico;
 
-public sealed record AbrirOrdemServicoCommand(Guid VehicleId, IReadOnlyList<string> Services);
+public sealed record RequestedServiceInput(Guid CatalogJobId, string Description);
+public sealed record AbrirOrdemServicoCommand(Guid VehicleId, IReadOnlyList<RequestedServiceInput> Services);
 
 public sealed class AbrirOrdemServicoHandler(
     IVehicleRepository vehicles,
@@ -21,7 +22,8 @@ public sealed class AbrirOrdemServicoHandler(
         if (vehicle is null)
             return Result.Failure<ServiceOrderDto>(Error.NotFound("Vehicle.NotFound", "Veículo não encontrado."));
 
-        var opened = ServiceOrder.Open(vehicle.ClientId, vehicle.Id, command.Services, clock.UtcNow);
+        var opened = ServiceOrder.OpenCatalogRequest(vehicle.ClientId, vehicle.Id, command.Services?
+            .Select(service => service is null ? null! : new RequestedService(Guid.NewGuid(), service.Description, service.CatalogJobId)).ToArray() ?? [], clock.UtcNow);
         if (opened.IsFailure)
             return Result.Failure<ServiceOrderDto>(opened.Error);
 

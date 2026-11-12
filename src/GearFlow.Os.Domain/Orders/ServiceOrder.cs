@@ -66,6 +66,23 @@ public sealed class ServiceOrder : Entity
 
     internal void AssignCode(int code) => Code = code;
 
+    public static Result<ServiceOrder> OpenCatalogRequest(Guid clientId, Guid vehicleId, IReadOnlyList<RequestedService> services, DateTime nowUtc)
+    {
+        if (services is null || services.Count == 0 || services.Count > 200 ||
+            services.Any(service => service is null || service.Id == Guid.Empty ||
+                service.CatalogJobId is null || service.CatalogJobId == Guid.Empty ||
+                string.IsNullOrWhiteSpace(service.Description) || service.Description.Trim().Length > 200) ||
+            services.Select(service => service.Id).Distinct().Count() != services.Count)
+            return Result.Failure<ServiceOrder>(Error.Validation("Os.InvalidRequestedJobs", "Informe de 1 a 200 serviços com identificador do catálogo e descrição de até 200 caracteres."));
+
+        var opened = Open(clientId, vehicleId, services.Select(service => service.Description).ToArray(), nowUtc);
+        if (opened.IsFailure)
+            return opened;
+        opened.Value._services.Clear();
+        opened.Value._services.AddRange(services.Select(service => new RequestedService(service.Id, service.Description.Trim(), service.CatalogJobId)));
+        return opened;
+    }
+
     public void CaptureDiagnostic(string snapshotJson, DateTime nowUtc)
     {
         DiagnosticSnapshotJson = snapshotJson;

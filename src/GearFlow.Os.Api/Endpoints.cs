@@ -119,6 +119,6 @@ public static class Endpoints
 
 public sealed record CreateClientRequest(string Name, string Document, string Email, string? Phone);
 public sealed record CreateVehicleRequest(Guid ClientId, string Plate, string Model);
-public sealed record OpenServiceOrderRequest(Guid VehicleId, IReadOnlyList<string>? Services);
+public sealed record OpenServiceOrderRequest(Guid VehicleId, IReadOnlyList<RequestedServiceInput>? Services);
 public sealed record CancelServiceOrderRequest(string? Motivo);
 public sealed record DevEventRequest(string Tipo, Guid OrdemServicoId, Guid? BudgetId, Guid? PaymentId, string? Payload);
