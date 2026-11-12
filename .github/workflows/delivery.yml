@@ -1,104 +1,121 @@
-name: Delivery
-
-# Deploy no EKS depois que o CI da main passa. Desligado por padrão: só roda com a variável DEPLOY_ENABLED=true
-# e as variáveis AWS_ROLE_ARN, AWS_REGION e EKS_CLUSTER_NAME (OIDC, sem chave de longa duração no GitHub).
-# A imagem vem do docker-publish.yml (tag sha-<commit>); aqui só se espera ela existir e se fixa o deploy no digest.
-# Pré-requisitos no cluster em k8s/README.md.
-
+name: OS Academy EKS
 on:
+  workflow_dispatch:
   workflow_run:
-    workflows: [CI]   # tem de ser igual ao `name:` do ci.yml
+    workflows: [CI]
     types: [completed]
     branches: [main]
-  workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
   group: os-delivery
   cancel-in-progress: false
-
 jobs:
   deploy:
-    name: Deploy no Kubernetes
     if: >-
-      vars.DEPLOY_ENABLED == 'true' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository))
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository))
+    environment: academy
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # OIDC com a AWS
+    timeout-minutes: 45
     env:
-      IMAGE_REPO: ghcr.io/gearflow-fiap/gearflow-os-service
-      TAG: sha-${{ github.event.workflow_run.head_sha || github.sha }}
+      AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME || vars.EKS_CLUSTER_NAME }}
+      BROKER_SECRET: ${{ vars.OS_BROKER_SECRET || 'rabbitmq-os-credentials' }}
+      BROKER_USER: ${{ vars.OS_BROKER_USER || 'gearflow_os' }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      # O docker-publish.yml roda em paralelo ao CI.
-      - name: Aguarda a imagem no GHCR e resolve o digest
-        id: image
-        run: |
-          for attempt in $(seq 1 40); do
-            digest=$(docker buildx imagetools inspect "$IMAGE_REPO:$TAG" --format '{{.Manifest.Digest}}' 2>/dev/null || true)
-            if [ -n "$digest" ]; then
-              echo "ref=$IMAGE_REPO@$digest" >> "$GITHUB_OUTPUT"
-              echo "Imagem: $IMAGE_REPO@$digest"
-              exit 0
-            fi
-            echo "Imagem $TAG ainda não publicada (tentativa $attempt/40)"
-            sleep 15
-          done
-          echo "::error::A imagem $IMAGE_REPO:$TAG não apareceu no GHCR em 10 minutos (o pacote precisa ser público)."
-          exit 1
-
+      - uses: actions/setup-dotnet@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        run: dotnet test tests/GearFlow.Os.Tests -c Release
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Seleciona o cluster
-        env:
-          CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
-          AWS_REGION: ${{ vars.AWS_REGION }}
-        run: aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
-
-      - name: Renderiza, valida e aplica
-        env:
-          IMAGE: ${{ steps.image.outputs.ref }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Select cluster and storage profile
         run: |
           set -euo pipefail
-          kubectl kustomize k8s/base \
-            | sed "s#image: gearflow-os-service:local#image: ${IMAGE}#" > "$RUNNER_TEMP/os.yaml"
-          grep -q "image: ${IMAGE}" "$RUNNER_TEMP/os.yaml"
-          for secret in gearflow-os-secret rabbitmq-os-credentials; do
-            kubectl get secret "$secret" -n gearflow >/dev/null || {
-              echo "::error::O Secret $secret não existe no namespace gearflow (veja k8s/README.md)."; exit 1; }
-          done
-          kubectl apply --dry-run=server -f "$RUNNER_TEMP/os.yaml"
-          kubectl apply -f "$RUNNER_TEMP/os.yaml"
-          kubectl rollout status deployment/gearflow-os -n gearflow --timeout=300s
-
-      - name: Smoke test em /health/ready (Service interno)
+          test -n "$AWS_REGION" && test -n "$EKS_CLUSTER_NAME"
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          version=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --query cluster.version --output text)
+          echo "KUBECTL_VERSION=v$version.0" >> "$GITHUB_ENV"
+          auto=$(aws eks describe-cluster --name "$EKS_CLUSTER_NAME" --query cluster.computeConfig.enabled --output text)
+          profile=k8s/academy
+          if [[ "$auto" == True || "$auto" == true ]]; then profile=k8s/academy-auto; fi
+          echo "DEPLOY_DIR=$profile" >> "$GITHUB_ENV"
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+      - name: Require shared broker and prepare namespace
         run: |
-          kubectl port-forward -n gearflow service/gearflow-os 18080:8080 >"$RUNNER_TEMP/port-forward.log" 2>&1 &
+          set -euo pipefail
+          kubectl rollout status statefulset/rabbitmq -n messaging --timeout=120s
+          kubectl create namespace gearflow --dry-run=client -o yaml | kubectl apply -f -
+          kubectl label namespace gearflow gearflow.io/messaging-access=true --overwrite
+      - name: Configure service secrets
+        env:
+          JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python scripts/configure_academy.py
+      - name: Prepare ECR
+        id: registry
+        run: |
+          set -euo pipefail
+          repo=gearflow-os
+          if ! aws ecr describe-repositories --repository-names "$repo" >/dev/null 2>&1; then
+            aws ecr create-repository --repository-name "$repo" --image-tag-mutability IMMUTABLE >/dev/null
+          fi
+          uri=$(aws ecr describe-repositories --repository-names "$repo" --query 'repositories[0].repositoryUri' --output text)
+          echo "uri=$uri" >> "$GITHUB_OUTPUT"
+          echo "tag=$(git rev-parse HEAD)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${uri%%/*}"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.registry.outputs.uri }}:${{ steps.registry.outputs.tag }}
+      - name: Render release and start database
+        env:
+          IMAGE: ${{ steps.registry.outputs.uri }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p k8s/academy-release
+          printf 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: [../%s]\nimages:\n  - name: gearflow-os-service\n    newName: %s\n    digest: %s\n' "${DEPLOY_DIR#k8s/}" "${IMAGE%@*}" "${IMAGE#*@}" > k8s/academy-release/kustomization.yaml
+          kubectl kustomize k8s/academy-release > "$RUNNER_TEMP/release.yaml"
+          kubectl apply --dry-run=server -f "$RUNNER_TEMP/release.yaml"
+          # Apply infrastructure before the API: migrations must finish before new pods start.
+          kubectl apply -f "$RUNNER_TEMP/release.yaml" --selector=gearflow.io/academy-infrastructure=true
+          kubectl rollout status statefulset/os-postgres -n gearflow --timeout=600s
+
+      - name: Deploy and verify
+        run: |
+          set -euo pipefail
+          kubectl apply -f "$RUNNER_TEMP/release.yaml"
+          kubectl rollout status deployment/gearflow-os -n gearflow --timeout=600s
+          kubectl port-forward -n gearflow service/gearflow-os 18080:8080 > "$RUNNER_TEMP/forward.log" 2>&1 &
           forward_pid=$!
           trap 'kill "$forward_pid"' EXIT
-          for attempt in $(seq 1 20); do
-            if curl --fail --silent --show-error http://127.0.0.1:18080/health/ready; then echo; exit 0; fi
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18080/health/ready; then exit 0; fi
             sleep 2
           done
-          cat "$RUNNER_TEMP/port-forward.log" || true
           exit 1
-
-      - name: Diagnóstico (só em falha)
+      - name: Diagnostics on failure
         if: failure()
         run: |
-          kubectl get pods -n gearflow -l app.kubernetes.io/name=gearflow-os -o wide || true
-          kubectl logs -n gearflow -l app.kubernetes.io/name=gearflow-os --tail=60 --all-containers || true
+          kubectl get pods,pvc,jobs -n gearflow || true
+          kubectl get events -n gearflow --sort-by=.lastTimestamp | tail -40 || true

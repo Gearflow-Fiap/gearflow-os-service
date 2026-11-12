@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {gearflow.io/academy-infrastructure: "true"}
+  name: os-postgres
+spec:
+  clusterIP: None
+  selector: {app: os-postgres}
+  ports: [{name: postgres, port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels: {gearflow.io/academy-infrastructure: "true"}
+  name: os-postgres
+spec:
+  serviceName: os-postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: os-postgres}
+  template:
+    metadata:
+      labels: {app: os-postgres}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:16
+          envFrom:
+            - secretRef: {name: gearflow-os-postgres}
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports: [{name: postgres, containerPort: 5432}]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: '1', memory: 768Mi}
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            periodSeconds: 5
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        storageClassName: gearflow-os-gp3
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 2Gi}
