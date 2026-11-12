@@ -49,10 +49,13 @@ public sealed class ServiceOrderConsumer(
 
     private async Task OnReceivedAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken cancellationToken)
     {
+        var json = Encoding.UTF8.GetString(delivery.Body.Span);
+        var routingKey = string.IsNullOrWhiteSpace(delivery.RoutingKey) ? delivery.Exchange : delivery.RoutingKey;
+        // Continua o trace de quem enviou (header traceparent do Billing ou Diagnostic-Id do MassTransit). Tudo que o handler enfileirar
+        // enquanto esta mensagem é processada herda este span, então a Saga segue como um trace só.
+        using var activity = OsTelemetry.StartConsume(OsTelemetry.ParentFromHeaders(delivery.BasicProperties.Headers, json), routingKey);
         try
         {
-            var json = Encoding.UTF8.GetString(delivery.Body.Span);
-            var routingKey = string.IsNullOrWhiteSpace(delivery.RoutingKey) ? delivery.Exchange : delivery.RoutingKey;
             IncomingSagaMessage? parsed;
             try
             {
@@ -70,6 +73,9 @@ public sealed class ServiceOrderConsumer(
                 await channel.BasicAckAsync(delivery.DeliveryTag, multiple: false, cancellationToken);
                 return;
             }
+
+            activity?.SetTag("os.saga.event", parsed.Type);
+            OsTelemetry.MarkServiceOrder(activity, parsed.ServiceOrderId);
 
             using var scope = scopes.CreateScope();
             var handler = scope.ServiceProvider.GetRequiredService<AtualizarStatusOsHandler>();
@@ -89,6 +95,7 @@ public sealed class ServiceOrderConsumer(
         }
         catch (Exception exception)
         {
+            activity?.SetStatus(System.Diagnostics.ActivityStatusCode.Error, exception.Message);
             logger.LogError(exception, "Falha ao processar evento {Route}.", delivery.RoutingKey);
             await channel.BasicNackAsync(delivery.DeliveryTag, multiple: false, requeue: true, cancellationToken);
         }

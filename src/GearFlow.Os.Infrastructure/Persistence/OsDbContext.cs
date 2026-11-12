@@ -89,6 +89,9 @@ public sealed class OsDbContext : DbContext
             message.Property(item => item.RoutingKey).HasMaxLength(200).IsRequired();
             message.Property(item => item.Payload).IsRequired();
             message.Property(item => item.ContentType).HasMaxLength(80);
+            // Os tamanhos precisam bater com o DDL de OutboxSchema (banco que já existia antes destas colunas).
+            message.Property(item => item.TraceParent).HasMaxLength(OutboxSchema.TraceParentLength);
+            message.Property(item => item.TraceState).HasMaxLength(OutboxSchema.TraceStateLength);
             message.HasIndex(item => item.ProcessedOn);
         });
 

@@ -1,3 +1,4 @@
+using GearFlow.Os.Application.Messaging;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -15,6 +16,8 @@ public static class Observability
             {
                 tracing.AddAspNetCoreInstrumentation();
                 tracing.AddHttpClientInstrumentation();
+                // Spans do outbox (os.outbox.publish) e do consumidor (os.consume): sem isto o trace da OS quebra no RabbitMQ.
+                tracing.AddSource(OsTelemetry.Name);
                 if (!string.IsNullOrWhiteSpace(otlp))
                     tracing.AddOtlpExporter();
             })

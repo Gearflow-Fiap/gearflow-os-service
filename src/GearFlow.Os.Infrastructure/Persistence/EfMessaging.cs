@@ -21,7 +21,11 @@ public sealed class EfOutbox(OsDbContext db) : IOutbox
             CorrelationId = TryReadGuid(payload, "ServiceOrderId") ?? Guid.Empty
         });
 
-    public void Enqueue(OutgoingMessage message) =>
+    public void Enqueue(OutgoingMessage message)
+    {
+        // O dispatcher publica em segundo plano, quando a requisição (ou a mensagem) que gerou isto já terminou:
+        // guarda-se o contexto agora para o trace continuar no próximo serviço.
+        var trace = OsTelemetry.CaptureCurrent();
         db.OutboxMessages.Add(new OutboxMessage
         {
             Id = Guid.NewGuid(),
@@ -32,8 +36,11 @@ public sealed class EfOutbox(OsDbContext db) : IOutbox
             ContentType = message.ContentType,
             MessageId = message.MessageId,
             CorrelationId = message.CorrelationId,
-            CreatedOn = DateTime.UtcNow
+            CreatedOn = DateTime.UtcNow,
+            TraceParent = trace.TraceParent,
+            TraceState = trace.TraceState
         });
+    }
 
     private static Guid? TryReadGuid(object payload, string property)
     {
