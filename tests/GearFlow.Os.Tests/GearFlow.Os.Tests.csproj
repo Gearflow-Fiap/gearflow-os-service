@@ -3,6 +3,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Mesmo nível de auditoria da API: os testes passaram a referenciar a API e herdam os pacotes dela. -->
+    <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
 
   <ItemGroup>

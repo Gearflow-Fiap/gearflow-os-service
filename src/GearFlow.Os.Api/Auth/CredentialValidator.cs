@@ -14,9 +14,10 @@ public static class CredentialValidator
         if (!options.IsConfigured || username is null || password is null)
             return false;
 
+        // As duas comparações rodam sempre, para não revelar pelo tempo qual dos dois campos errou.
         var userOk = FixedTimeEquals(username, options.Username);
         var passwordOk = FixedTimeEquals(password, options.Password);
-        return userOk & passwordOk;
+        return userOk && passwordOk;
     }
 
     private static bool FixedTimeEquals(string informed, string expected) =>
