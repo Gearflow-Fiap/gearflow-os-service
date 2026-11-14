@@ -56,6 +56,8 @@ services:
       Jwt__Secret: dev-only-super-secret-change-me-32chars-minimum
       Jwt__Issuer: GearFlow.Api
       Jwt__Audience: GearFlow.Client
+      Auth__Username: admin
+      Auth__Password: admin
     depends_on:
       postgres:
         condition: service_healthy

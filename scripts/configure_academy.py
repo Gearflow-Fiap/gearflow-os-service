@@ -22,6 +22,9 @@ def main():
     password, jwt = os.environ['DB_PASSWORD'], os.environ['JWT_SIGNING_KEY']
     if not password or len(jwt.encode()) < 32:
         raise SystemExit('DB_PASSWORD and JWT_SIGNING_KEY (at least 32 UTF-8 bytes) are required.')
+    auth_user, auth_password = os.environ.get('AUTH_USERNAME', ''), os.environ.get('AUTH_PASSWORD', '')
+    if bool(auth_user) != bool(auth_password):
+        raise SystemExit('AUTH_USERNAME and AUTH_PASSWORD must be configured together.')
     source = kubectl('get', 'secret', os.environ['BROKER_SECRET'], '-n', 'messaging', '-o', 'json')['data']
     user = base64.b64decode(source['username'], validate=True).decode()
     broker_password = base64.b64decode(source['password'], validate=True).decode()
@@ -33,6 +36,8 @@ def main():
     secret(f'gearflow-{SERVICE}-postgres', {'POSTGRES_DB': f'gearflow_{SERVICE}', 'POSTGRES_USER': SERVICE, 'POSTGRES_PASSWORD': password})
     values = {'ConnectionStrings__OsDb': connection, 'Jwt__Secret': jwt,
               'Jwt__Issuer': 'GearFlow.Api', 'Jwt__Audience': 'GearFlow.Client'}
+    if auth_user:
+        values.update({'Auth__Username': auth_user, 'Auth__Password': auth_password})
     if SERVICE == 'operation':
         values.update({'RabbitMq__Username': user, 'RabbitMq__Password': broker_password})
         secret('gearflow-operation-migrations', {'ConnectionStrings__Operation': connection})

@@ -1,6 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
+using GearFlow.Os.Api.Auth;
 using GearFlow.Os.Api.Jwt;
 using GearFlow.Os.Application.Messaging;
 using GearFlow.Os.Application.UseCases.AbrirOrdemServico;
@@ -12,7 +10,6 @@ using GearFlow.Os.Application.UseCases.ConsultarCadastro;
 using GearFlow.Os.Application.UseCases.ConsultarOrdemServico;
 using GearFlow.Os.Application.UseCases.FinalizarOrdemServico;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 
 namespace GearFlow.Os.Api;
 
@@ -67,21 +64,8 @@ public static class Endpoints
     public static IEndpointRouteBuilder MapDevEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/dev/token", (IOptions<JwtOptions> jwt) =>
-        {
-            var settings = jwt.Value;
-            var token = new JwtSecurityToken(
-                settings.Issuer,
-                settings.Audience,
-                [
-                    new Claim(JwtRegisteredClaimNames.Sub, "os-dev"),
-                    new Claim("actor_type", "staff")
-                ],
-                expires: DateTime.UtcNow.AddHours(8),
-                signingCredentials: new SigningCredentials(
-                    new SymmetricSecurityKey(Encoding.UTF8.GetBytes(settings.Secret)),
-                    SecurityAlgorithms.HmacSha256));
-            return Results.Ok(new { accessToken = new JwtSecurityTokenHandler().WriteToken(token) });
-        }).AllowAnonymous().WithTags("Desenvolvimento")
+            Results.Ok(new { accessToken = TokenIssuer.Issue(jwt.Value, "os-dev", TimeSpan.FromHours(8), DateTime.UtcNow).AccessToken }))
+            .AllowAnonymous().WithTags("Desenvolvimento")
             .WithSummary("Emite JWT de desenvolvimento").WithDescription("Só existe em Development.");
 
         app.MapPost("/api/dev/eventos", async (DevEventRequest body, AtualizarStatusOsHandler handler, CancellationToken ct) =>

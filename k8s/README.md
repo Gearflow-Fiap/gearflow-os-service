@@ -6,6 +6,7 @@ Secret esperado (`gearflow-os-secret`):
 
 - `ConnectionStrings__OsDb`
 - `Jwt__Secret` (HMAC, mÃ­nimo 32 caracteres, o mesmo emissor dos outros serviÃ§os)
+- `Auth__Username` e `Auth__Password` (opcionais, sempre juntos): credencial de `POST /api/auth/token`, vinda dos secrets `OS_AUTH_USERNAME` e `OS_AUTH_PASSWORD` do GitHub
 
 ## RabbitMQ compartilhado
 

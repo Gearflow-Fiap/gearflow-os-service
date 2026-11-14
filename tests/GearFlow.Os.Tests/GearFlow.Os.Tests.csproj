@@ -3,6 +3,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Mesmo nível de auditoria da API: os testes passaram a referenciar a API e herdam os pacotes dela. -->
+    <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\GearFlow.Os.Api\GearFlow.Os.Api.csproj" />
     <ProjectReference Include="..\..\src\GearFlow.Os.Application\GearFlow.Os.Application.csproj" />
     <ProjectReference Include="..\..\src\GearFlow.Os.Domain\GearFlow.Os.Domain.csproj" />
   </ItemGroup>
