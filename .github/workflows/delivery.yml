@@ -67,6 +67,8 @@ jobs:
         env:
           JWT_SIGNING_KEY: ${{ secrets.JWT_SIGNING_KEY }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          AUTH_USERNAME: ${{ secrets.OS_AUTH_USERNAME }}
+          AUTH_PASSWORD: ${{ secrets.OS_AUTH_PASSWORD }}
         run: python scripts/configure_academy.py
       - name: Prepare ECR
         id: registry

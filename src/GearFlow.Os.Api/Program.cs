@@ -1,4 +1,5 @@
 using GearFlow.Os.Api;
+using GearFlow.Os.Api.Auth;
 using GearFlow.Os.Api.Jwt;
 using GearFlow.Os.Domain.Primitives;
 using GearFlow.Os.Infrastructure;
@@ -8,8 +9,9 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddBearerSecurity());
 builder.Services.AddOsJwt(builder.Configuration);
+builder.Services.AddOsAuth(builder.Configuration);
 builder.Services.AddOsObservability(builder.Configuration);
 builder.Services.AddOsService(builder.Configuration);
 builder.Services.AddHealthChecks()
@@ -26,12 +28,14 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapOpenApi();
 app.MapScalarApiReference();
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
 app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") });
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapOsEndpoints();
+app.MapAuthEndpoints();
 if (app.Environment.IsDevelopment())
     app.MapDevEndpoints();
 

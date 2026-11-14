@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\GearFlow.Os.Api\GearFlow.Os.Api.csproj" />
     <ProjectReference Include="..\..\src\GearFlow.Os.Application\GearFlow.Os.Application.csproj" />
     <ProjectReference Include="..\..\src\GearFlow.Os.Domain\GearFlow.Os.Domain.csproj" />
   </ItemGroup>

@@ -100,13 +100,25 @@ docker compose up -d postgres rabbitmq
 dotnet run --project src/GearFlow.Os.Api
 ```
 
-JWT de desenvolvimento (o mesmo segredo HMAC do Inventory):
+## Autenticação
+
+As rotas `/api/*` exigem `Authorization: Bearer <accessToken>`. O token sai de:
 
 ```http
-POST /api/dev/token
+POST /api/auth/token
+{ "username": "admin", "password": "admin" }
 ```
 
-Use `Authorization: Bearer <accessToken>` nas rotas `/api/*`.
+Resposta: `{ "accessToken": "...", "tokenType": "Bearer", "expiresIn": 3600, "expiresAtUtc": "..." }`. No Scalar, use o botão de autenticação (esquema `Bearer`) e cole o `accessToken`.
+
+- Usuário e senha vêm de configuração: `Auth__Username` e `Auth__Password` (validade opcional em `Auth__TokenMinutes`, padrão 60). Nunca ficam no código.
+- Local (`appsettings.Development.json` e Compose): `admin` / `admin`.
+- EKS: secrets do GitHub `OS_AUTH_USERNAME` e `OS_AUTH_PASSWORD`, gravados pelo `delivery.yml` no Secret `gearflow-os-secret`. Sem eles, a API sobe normalmente, mas `POST /api/auth/token` não é publicado. Só um dos dois configurado impede a subida.
+- O token é assinado com o mesmo `Jwt__Secret`, issuer e audience que os outros serviços validam.
+- Usuário ou senha errados respondem `401`. São 10 tentativas por minuto; acima disso, `429`. Atrás do ELB o limite vale para todos os clientes juntos.
+- A API no ELB está em HTTP: usuário e senha trafegam sem criptografia. Use uma senha exclusiva deste ambiente.
+
+Em Development também existe `POST /api/dev/token`, que emite um token sem senha (validade de 8 horas).
 
 ## Fluxo local sem os outros serviços
 
